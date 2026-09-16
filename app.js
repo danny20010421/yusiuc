@@ -24,27 +24,52 @@
       label: "Anthropic（Claude）",
       endpoint: "https://api.anthropic.com/v1/messages",
       modelPlaceholder: "例如：claude-sonnet-4-6",
-      note: "Anthropic 官方支援瀏覽器端直接呼叫（CORS），是本工具最推薦、最穩定的選項。API 金鑰只會存在你的瀏覽器裡，直接送往 Anthropic 官方網址。"
+      modelSuggestions: ["claude-opus-4-6", "claude-sonnet-4-6", "claude-haiku-4-6"],
+      note: "Anthropic 官方支援瀏覽器端直接呼叫（CORS），是本工具最推薦、最穩定的選項之一。API 金鑰只會存在你的瀏覽器裡，直接送往 Anthropic 官方網址。",
+      keyUrl: "https://console.anthropic.com/settings/keys",
+      keyLabel: "console.anthropic.com（需先儲值額度）"
     },
     google: {
       label: "Google（Gemini）",
       endpoint: "https://generativelanguage.googleapis.com/v1beta/models",
       modelPlaceholder: "例如：gemini-2.5-flash / gemini-2.5-pro",
-      note: "Google 的 Gemini API（generateContent）本身就允許瀏覽器跨網域直接呼叫，不需要額外標頭，同樣是穩定可用的選擇。金鑰可到 aistudio.google.com/app/apikey 申請，通常有免費額度可先試用。"
+      modelSuggestions: ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.5-flash-lite"],
+      note: "Google 的 Gemini API（generateContent）本身就允許瀏覽器跨網域直接呼叫，不需要額外標頭，同樣是穩定可用的選擇，通常有免費額度可先試用。",
+      keyUrl: "https://aistudio.google.com/app/apikey",
+      keyLabel: "aistudio.google.com（有免費額度）"
+    },
+    openrouter: {
+      label: "OpenRouter（多模型聚合）",
+      endpoint: "https://openrouter.ai/api/v1/chat/completions",
+      modelPlaceholder: "例如：anthropic/claude-sonnet-4.6、openai/gpt-4.1、google/gemini-2.5-pro",
+      modelSuggestions: ["anthropic/claude-sonnet-4.6", "openai/gpt-4.1", "google/gemini-2.5-pro", "deepseek/deepseek-chat"],
+      note: "用一組金鑰呼叫多家廠商的模型（含 OpenAI、Anthropic、Google 等），採 OpenAI 相容格式，一般允許瀏覽器直接呼叫。可用餘額制付費，模型清單與價格請查 openrouter.ai/models。",
+      keyUrl: "https://openrouter.ai/keys",
+      keyLabel: "openrouter.ai（依用量計費）"
     },
     openai: {
       label: "OpenAI 相容 API",
       endpoint: "https://api.openai.com/v1/chat/completions",
       modelPlaceholder: "例如：gpt-4.1 / gpt-4o",
-      note: "OpenAI 官方 API 通常會擋掉瀏覽器直接呼叫（CORS 限制），純靜態網站可能無法直連。建議改用支援瀏覽器呼叫的相容服務（例如 OpenRouter），或自行架設一個轉發用的伺服器端 Proxy。"
+      modelSuggestions: ["gpt-4.1", "gpt-4o", "gpt-4o-mini"],
+      note: "OpenAI 官方 API 通常會擋掉瀏覽器直接呼叫（CORS 限制），純靜態網站可能無法直連。建議改用支援瀏覽器呼叫的相容服務（例如 OpenRouter），或自行架設一個轉發用的伺服器端 Proxy。",
+      keyUrl: "https://platform.openai.com/api-keys",
+      keyLabel: "platform.openai.com（需先儲值額度）"
     },
     custom: {
       label: "自訂 OpenAI 相容端點",
       endpoint: "",
       modelPlaceholder: "依服務提供的模型名稱填寫",
-      note: "適用於 OpenRouter、Ollama（本機）、DeepSeek、月之暗面等任何相容 OpenAI Chat Completions 格式、且允許瀏覽器跨網域呼叫的服務。請填入完整的 chat/completions 端點網址。"
+      modelSuggestions: [],
+      note: "適用於 Ollama（本機）、DeepSeek、月之暗面等任何相容 OpenAI Chat Completions 格式、且允許瀏覽器跨網域呼叫的服務。請填入完整的 chat/completions 端點網址。",
+      keyUrl: "",
+      keyLabel: ""
     }
   };
+
+  const GENRE_PRESETS = ["都市異能", "奇幻", "武俠", "仙俠", "科幻", "歷史架空", "懸疑推理", "恐怖驚悚", "言情", "校園青春", "職場", "家庭倫理", "冒險", "輕小說", "反烏托邦"];
+  const TONE_PRESETS = ["輕鬆詼諧", "溫暖治癒", "黑暗壓抑", "熱血激昂", "浪漫甜蜜", "懸疑緊張", "冷峻寫實", "荒誕幽默", "感傷憂鬱", "史詩壯闊"];
+  const STYLE_PRESETS = ["短句明快", "長句細膩", "感官細節豐富", "對白為主導", "內心獨白多", "意識流", "古典雅致", "白話直敘", "電影運鏡感", "詩意抒情"];
 
   /* ---------------------------------------------------------------------
      工具函式
@@ -162,7 +187,9 @@
       timeline: [],
       glossary: [],
       constraints: { mustInclude: "", mustAvoid: "", rating: "", other: "" },
-      chapters: []
+      chapters: [],
+      review: null,
+      ebookSettings: { fontSize: 18, lineHeight: 2.0, theme: "paper", vertical: false }
     };
     db.order.unshift(id);
     db.activeId = id;
@@ -259,10 +286,30 @@
     const renderers = {
       settings: renderSettingsPanel, world: renderWorldPanel, timeline: renderTimelinePanel,
       characters: renderCharactersPanel, glossary: renderGlossaryPanel, constraints: renderConstraintsPanel,
-      structure: renderStructurePanel, ai: renderAiPanel, export: renderExportPanel
+      structure: renderStructurePanel, review: renderReviewPanel, ebook: renderEbookPanel,
+      ai: renderAiPanel, export: renderExportPanel
     };
     const fn = renderers[state.tab];
     if (fn) fn(p);
+  }
+
+  /* ---------------------------------------------------------------------
+     標籤（chip）選項小工具，共用於基本設定的類型／基調／風格
+     --------------------------------------------------------------------- */
+  function parseTags(value) {
+    return (value || "").split(/[、,，]/).map((s) => s.trim()).filter(Boolean);
+  }
+  function toggleTag(value, tag) {
+    const parts = parseTags(value);
+    const idx = parts.indexOf(tag);
+    if (idx >= 0) parts.splice(idx, 1); else parts.push(tag);
+    return parts.join("、");
+  }
+  function renderChipGroup(scope, key, presets, currentValue) {
+    const selected = parseTags(currentValue);
+    return `<div class="chip-group">${presets.map((tag) => `
+      <button type="button" class="chip ${selected.includes(tag) ? "is-selected" : ""}" data-act="toggle-tag" data-scope="${scope}" data-key="${key}" data-tag="${escapeHtml(tag)}">${escapeHtml(tag)}</button>
+    `).join("")}</div>`;
   }
 
   /* ---------------------------------------------------------------------
@@ -278,16 +325,20 @@
         <div class="field">
           <label>小說性質／類型</label>
           <input type="text" data-scope="settings" data-key="genre" value="${escapeHtml(s.genre)}" placeholder="例如：都市異能、架空歷史、輕科幻、言情">
+          ${renderChipGroup("settings", "genre", GENRE_PRESETS, s.genre)}
         </div>
         <div class="field">
           <label>基調</label>
           <input type="text" data-scope="settings" data-key="tone" value="${escapeHtml(s.tone)}" placeholder="例如：輕鬆詼諧、黑暗壓抑、溫暖治癒">
+          ${renderChipGroup("settings", "tone", TONE_PRESETS, s.tone)}
         </div>
       </div>
 
       <div class="field">
         <label>寫作風格</label>
         <textarea data-scope="settings" data-key="style" placeholder="描述文字節奏、句式長短、用詞偏好、對白比例、節奏快慢等。例如：短句為主、多用感官細節、對白精簡有潛台詞。">${escapeHtml(s.style)}</textarea>
+        ${renderChipGroup("settings", "style", STYLE_PRESETS, s.style)}
+        <p class="hint">點選下方標籤可直接加入／移除，也可以在上面欄位自行補充更細緻的描述。</p>
       </div>
 
       <div class="field">
@@ -572,6 +623,11 @@
             <button class="btn btn-ghost btn-sm" data-act="clear-section" data-id="${s.id}">清空內容</button>
             <span class="sec-wordcount">${wc.toLocaleString()} 字</span>
           </div>
+          <div class="revise-box">
+            <label>給 AI 的修改建議（內容微調）</label>
+            <textarea data-scope="section" data-id="${s.id}" data-key="feedback" placeholder="例如：這段對話太生硬、加強場景氣氛描寫、第二段步調太快、把結尾改得更懸疑一點…">${escapeHtml(s.feedback || "")}</textarea>
+            <button class="btn btn-jade btn-sm" data-act="revise-section" data-id="${s.id}">依建議微調本節</button>
+          </div>
         </div>
       </div>`;
   }
@@ -592,15 +648,19 @@
         </select>
       </div>
       <div class="provider-note" id="provider-note">${info.note}</div>
+      ${info.keyUrl ? `<div class="provider-key-link">申請金鑰：<a href="${escapeHtml(info.keyUrl)}" target="_blank" rel="noopener">${escapeHtml(info.keyLabel)}</a></div>` : ""}
 
       <div class="row row-2">
         <div class="field">
           <label>API 端點網址</label>
           <input type="text" id="ai-endpoint" value="${escapeHtml(aiConfig.endpoint || info.endpoint)}" placeholder="${escapeHtml(info.endpoint)}">
+          <p class="field-hint">AI 服務商公告的 API 呼叫網址，通常寫在該服務官方文件的「Quickstart／API Reference」頁面，<b>不是</b>登入頁或金鑰申請頁的網址。切換上方服務提供者會自動帶入常見預設值。</p>
         </div>
         <div class="field">
           <label>模型名稱</label>
-          <input type="text" id="ai-model" value="${escapeHtml(aiConfig.model)}" placeholder="${escapeHtml(info.modelPlaceholder)}">
+          <input type="text" id="ai-model" list="ai-model-list" value="${escapeHtml(aiConfig.model)}" placeholder="${escapeHtml(info.modelPlaceholder)}">
+          <datalist id="ai-model-list">${(info.modelSuggestions || []).map((m) => `<option value="${escapeHtml(m)}">`).join("")}</datalist>
+          <p class="field-hint">可從下拉建議選擇，或直接輸入該服務目前提供的模型代號；模型名稱會隨時間更新，請以該服務官方文件為準。</p>
         </div>
       </div>
 
@@ -608,10 +668,12 @@
         <div class="field">
           <label>API 金鑰</label>
           <input type="password" id="ai-key" value="${escapeHtml(aiConfig.apiKey)}" placeholder="貼上你的 API 金鑰" autocomplete="off">
+          <p class="field-hint">金鑰只會存在這個瀏覽器的 localStorage，直接送往你上面填寫的端點網址，不會經過本網站以外的任何伺服器。</p>
         </div>
         <div class="field">
           <label>創意程度（temperature）</label>
           <input type="number" id="ai-temp" min="0" max="2" step="0.1" value="${aiConfig.temperature}">
+          <p class="field-hint">數值愈高，生成內容愈天馬行空、變化愈大；數值愈低，內容愈穩定保守。建議範圍 0～1.5，多數情境用 0.8～1 即可。</p>
         </div>
       </div>
 
@@ -621,6 +683,24 @@
       </div>
 
       <div class="key-warning">⚠️ 金鑰會以明碼存在瀏覽器的 localStorage 中，任何能使用這台電腦、這個瀏覽器設定檔的人都看得到。請只在自己信任的裝置上使用，不要把金鑰交給別人或貼到公開的地方。</div>
+
+      <details class="help-accordion">
+        <summary>操作說明與常見問題</summary>
+        <div class="help-body">
+          <dl>
+            <dt>這裡的設定跟哪些作品有關？</dt>
+            <dd>AI 設定是整個瀏覽器共用的，不屬於任一部作品；所有作品生成內容時都會用這裡設定的服務與金鑰。</dd>
+            <dt>「連線失敗」大概是什麼原因？</dt>
+            <dd>最常見兩種：① 瀏覽器被服務商擋掉跨網域呼叫（訊息常出現 CORS 或 Failed to fetch 字樣）——這時通常要換一家官方支援瀏覽器直連的服務；② 金鑰、端點或模型名稱打錯，或帳號額度不足——錯誤訊息通常會直接寫出 401／404／429 等狀態碼與原因。</dd>
+            <dt>「AI 生成本節」跟「依建議微調本節」有什麼差別？</dt>
+            <dd>「生成本節」是從無到有依大綱寫出這一節；「依建議微調本節」則是把這一節目前已有的內容連同你填的修改意見一起交給 AI，請它重寫成調整後的版本，會整段取代原本內容。</dd>
+            <dt>「AI 審核」在做什麼？</dt>
+            <dd>把所有已撰寫章節整合起來，連同你設定的世界觀、人物、時間線、風格與限制，一起請 AI 檢查前後是否連貫、有沒有違反你自己訂的規則，並給出評分與建議，不會自動修改任何內容。</dd>
+            <dt>模型名稱要打什麼？</dt>
+            <dd>每家服務的可用模型清單與確切名稱請以該服務官方文件或後台為準，這裡的建議清單僅供參考，可能會過期。</dd>
+          </dl>
+        </div>
+      </details>
     `;
 
     $("#ai-provider").addEventListener("change", (e) => {
@@ -704,6 +784,15 @@
         });
         break;
 
+      case "toggle-tag": {
+        const scope = ds.scope, key = ds.key, tag = ds.tag;
+        if (scope === "settings") {
+          p.settings[key] = toggleTag(p.settings[key], tag);
+          touch(p); renderSettingsPanel(p);
+        }
+        break;
+      }
+
       case "add-timeline":
         p.timeline.push({ id: uid(), time: "", event: "" }); touch(p); renderTimelinePanel(p); break;
       case "delete-timeline":
@@ -728,7 +817,7 @@
         for (let i = 0; i < chCount; i++) {
           const chapter = { id: uid(), title: `第 ${startNo + i + 1} 章`, outline: "", sections: [] };
           for (let j = 0; j < secCount; j++) {
-            chapter.sections.push({ id: uid(), title: "", outline: "", targetWords: secWords, content: "", status: "empty" });
+            chapter.sections.push({ id: uid(), title: "", outline: "", targetWords: secWords, content: "", status: "empty", feedback: "" });
           }
           p.chapters.push(chapter);
         }
@@ -750,7 +839,7 @@
         state.openChapters[ds.id] = !state.openChapters[ds.id]; renderStructurePanel(p); break;
       case "add-section": {
         const chapter = p.chapters.find((c) => c.id === ds.id);
-        chapter.sections.push({ id: uid(), title: "", outline: "", targetWords: 2000, content: "", status: "empty" });
+        chapter.sections.push({ id: uid(), title: "", outline: "", targetWords: 2000, content: "", status: "empty", feedback: "" });
         touch(p); renderStructurePanel(p); renderProjectHeader(p); break;
       }
       case "delete-section":
@@ -771,9 +860,17 @@
       case "generate-section":
         generateSection(p, ds.id, ev.target);
         break;
+      case "revise-section":
+        reviseSection(p, ds.id, ev.target);
+        break;
+
+      case "run-review":
+        runReview(p, ev.target);
+        break;
 
       case "export-novel-txt": exportNovelTxt(p); break;
       case "export-project-json": exportProjectJson(p); break;
+      case "download-ebook": downloadEbook(p); break;
     }
   }
 
@@ -926,7 +1023,7 @@
     return (data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) || "";
   }
 
-  function buildSystemPrompt(p) {
+  function buildSettingsContext(p) {
     const s = p.settings;
     const core = p.characters.filter((c) => c.role === "核心");
     const side = p.characters.filter((c) => c.role === "配角");
@@ -935,7 +1032,6 @@
     ).join("\n");
 
     const lines = [
-      "你是一位專業的小說寫手，請完全依照以下設定創作繁體中文小說內容，只輸出正文本身，不要輸出任何說明、前言、標題或註解。",
       s.genre ? `【小說性質】${s.genre}` : "",
       s.tone ? `【基調】${s.tone}` : "",
       s.style ? `【寫作風格】${s.style}` : "",
@@ -952,6 +1048,12 @@
       p.constraints.other ? `【其他限制】${p.constraints.other}` : ""
     ].filter(Boolean);
     return lines.join("\n\n");
+  }
+
+  function buildSystemPrompt(p) {
+    const instruction = "你是一位專業的小說寫手，請完全依照以下設定創作繁體中文小說內容，只輸出正文本身，不要輸出任何說明、前言、標題或註解。";
+    const context = buildSettingsContext(p);
+    return context ? `${instruction}\n\n${context}` : instruction;
   }
 
   function previousContext(p, chapter, section) {
@@ -1002,6 +1104,276 @@
     } finally {
       btnEl.disabled = false; btnEl.textContent = originalLabel;
     }
+  }
+
+  async function reviseSection(p, sectionId, btnEl) {
+    const section = findSection(p, sectionId);
+    const chapter = findChapterOfSection(p, sectionId);
+    if (!section || !chapter) return;
+    if (!section.content || !section.content.trim()) { toast("這一節還沒有內容，請先生成或手動撰寫後再微調"); return; }
+    if (!section.feedback || !section.feedback.trim()) { toast("請先在「給 AI 的修改建議」欄位填寫想調整的地方"); return; }
+
+    const system = buildSystemPrompt(p) + "\n\n你現在的任務是依照使用者的修改建議，重寫並微調下面這一節「已存在」的內容，維持與前後文的連貫，並同樣只輸出這一節微調後的完整正文，不要輸出任何說明或前言。";
+    const user = [
+      `【目前所在章節】${chapter.title || "（未命名章節）"}`,
+      `【這一節目前的完整內容】\n${section.content}`,
+      `【使用者的修改建議】\n${section.feedback}`,
+      "請輸出微調後的完整本節內容（整節正文，不要只給片段或摘要）。"
+    ].join("\n\n");
+
+    const originalLabel = btnEl.textContent;
+    btnEl.disabled = true; btnEl.textContent = "微調中…";
+    try {
+      const text = await callAI({ system, user });
+      section.content = text.trim();
+      touch(p);
+      renderStructurePanel(p);
+      renderProjectHeader(p);
+      toast("已依建議微調本節內容，記得再檢查一次");
+    } catch (err) {
+      toast("微調失敗：" + err.message);
+    } finally {
+      btnEl.disabled = false; btnEl.textContent = originalLabel;
+    }
+  }
+
+  /* ---------------------------------------------------------------------
+     AI 審核：檢查連貫性與是否符合設定，給評級與建議
+     --------------------------------------------------------------------- */
+  function gatherManuscript(p) {
+    let out = "";
+    p.chapters.forEach((c, ci) => {
+      const written = c.sections.filter((s) => s.content && s.content.trim());
+      if (!written.length) return;
+      out += `\n\n===== 第 ${ci + 1} 章　${c.title || ""} =====\n`;
+      written.forEach((s, si) => { out += `\n【第 ${si + 1} 節】${s.title ? s.title + "\n" : ""}${s.content}\n`; });
+    });
+    return out.trim();
+  }
+
+  function stripJsonFence(text) {
+    return text.replace(/^```json\s*/i, "").replace(/^```\s*/, "").replace(/```\s*$/, "").trim();
+  }
+
+  async function runReview(p, btnEl) {
+    const manuscript = gatherManuscript(p);
+    if (!manuscript) { toast("目前還沒有任何已撰寫的章節內容可供審核"); return; }
+
+    const system = [
+      "你是一位經驗豐富的小說編輯與審稿人。你的任務不是創作，而是審核使用者提供的小說設定與已完成的內文草稿。",
+      "請檢查兩件事：一、劇情前後的連貫性（角色設定、時間線、用語是否前後一致，有無矛盾或斷裂）；二、內文是否確實符合下方提供的寫作風格、人稱視角、世界觀、故事限制與特殊名詞設定。",
+      "請只輸出一個 JSON 物件，不要輸出任何 JSON 以外的文字、不要使用 Markdown code fence，格式如下：",
+      `{"overall_score": 1-10的整數, "consistency_score": 1-10的整數, "compliance_score": 1-10的整數, "summary": "一段整體評語", "chapter_notes": [{"chapter": "章節名稱", "note": "這一章的具體評語"}], "issues": ["發現的具體問題，盡量指出在哪一章哪一節"], "suggestions": ["具體可執行的修改建議"]}`
+    ].join("\n");
+
+    const settingsBlock = buildSettingsContext(p);
+    const user = `【全書設定】\n${settingsBlock || "（使用者尚未填寫詳細設定）"}\n\n【目前已完成的內文】\n${manuscript}`;
+
+    const originalLabel = btnEl.textContent;
+    btnEl.disabled = true; btnEl.textContent = "審核中…";
+    try {
+      const raw = await callAI({ system, user });
+      let parsed = null;
+      try { parsed = JSON.parse(stripJsonFence(raw)); } catch (e) { parsed = null; }
+      p.review = { updatedAt: Date.now(), data: parsed, raw: raw };
+      touch(p);
+      renderReviewPanel(p);
+      toast(parsed ? "審核完成" : "審核完成，但回覆格式無法完整解析，已顯示原始內容");
+    } catch (err) {
+      toast("審核失敗：" + err.message);
+    } finally {
+      btnEl.disabled = false; btnEl.textContent = originalLabel;
+    }
+  }
+
+  function scoreClass(n) {
+    if (n >= 8) return "score-good";
+    if (n >= 5) return "score-mid";
+    return "score-bad";
+  }
+
+  function renderReviewPanel(p) {
+    const manuscriptExists = !!gatherManuscript(p);
+    const r = p.review;
+    let body = "";
+    if (!r) {
+      body = `<div class="review-empty">${manuscriptExists ? "尚未進行過審核，點上方按鈕讓 AI 檢查目前已完成的內容。" : "目前還沒有任何已撰寫的章節內容，先到「章節與生成」分頁生成或撰寫一些內容後，再回來審核。"}</div>`;
+    } else if (r.data) {
+      const d = r.data;
+      body = `
+        <div class="score-grid">
+          <div class="score-card ${scoreClass(d.overall_score || 0)}"><div class="score-num">${d.overall_score ?? "－"}</div><div class="score-label">整體評分</div></div>
+          <div class="score-card ${scoreClass(d.consistency_score || 0)}"><div class="score-num">${d.consistency_score ?? "－"}</div><div class="score-label">連貫性評分</div></div>
+          <div class="score-card ${scoreClass(d.compliance_score || 0)}"><div class="score-num">${d.compliance_score ?? "－"}</div><div class="score-label">符合設定評分</div></div>
+        </div>
+        ${d.summary ? `<div class="review-summary">${escapeHtml(d.summary)}</div>` : ""}
+        ${(d.chapter_notes || []).length ? `
+          <div class="review-list-title">各章評語</div>
+          ${d.chapter_notes.map((c) => `<div class="review-chapter-note"><b>${escapeHtml(c.chapter || "")}</b>${escapeHtml(c.note || "")}</div>`).join("")}
+        ` : ""}
+        ${(d.issues || []).length ? `<div class="review-list-title">發現的問題</div><ul class="review-list">${d.issues.map((i) => `<li>${escapeHtml(i)}</li>`).join("")}</ul>` : ""}
+        ${(d.suggestions || []).length ? `<div class="review-list-title">修改建議</div><ul class="review-list">${d.suggestions.map((i) => `<li>${escapeHtml(i)}</li>`).join("")}</ul>` : ""}
+      `;
+    } else {
+      body = `<div class="review-list-title">AI 回覆（原始內容，格式無法自動解析）</div><div class="review-raw">${escapeHtml(r.raw)}</div>`;
+    }
+
+    $("#panel-review").innerHTML = `
+      <h2 class="section-title">AI 審核 <span>檢查劇情連貫性與是否符合前述設定，給予評級與建議</span></h2>
+      <p class="panel-intro">AI 會讀取目前所有已撰寫的章節內容，比對角色設定、時間線、世界觀、寫作風格、人稱視角與故事限制，找出前後矛盾或偏離設定之處，並給出評分與具體建議。</p>
+      <div class="review-toolbar">
+        <button class="btn btn-seal" data-act="run-review">${r ? "🔍 重新審核" : "🔍 開始審核"}</button>
+        ${r ? `<span class="review-timestamp">上次審核：${formatDate(r.updatedAt)}</span>` : ""}
+      </div>
+      ${body}
+      <p class="review-disclaimer">＊ AI 審核僅供參考，判斷可能有誤或不完整，請以自己的創作判斷為準；審核不會自動修改任何內容，如需調整請至各小節使用「依建議微調本節」，或直接手動編輯。</p>
+    `;
+  }
+
+  /* ---------------------------------------------------------------------
+     電子書預覽：仿日系／台灣出版排版
+     --------------------------------------------------------------------- */
+  const EBOOK_THEMES = {
+    paper: { bg: "#F5F0E6", fg: "#211E19", accent: "#A13D2B", sub: "#948C79" },
+    sepia: { bg: "#EFE3CC", fg: "#3B2E1E", accent: "#8A5A2B", sub: "#9C8863" },
+    night: { bg: "#1B1B1E", fg: "#E4E0D6", accent: "#D98C6A", sub: "#8A8578" }
+  };
+
+  function paragraphsHtml(content) {
+    return content.split(/\n+/).map((s) => s.trim()).filter(Boolean).map((s) => `<p>${escapeHtml(s)}</p>`).join("\n");
+  }
+
+  function generateEbookHtml(p, opts) {
+    const theme = EBOOK_THEMES[opts.theme] || EBOOK_THEMES.paper;
+    const chaptersHtml = p.chapters.map((c, ci) => {
+      const sections = c.sections.filter((s) => s.content && s.content.trim());
+      if (!sections.length) return "";
+      const secHtml = sections.map((s, si) => `
+        ${si > 0 ? `<div class="scene-break">※</div>` : ""}
+        ${s.title ? `<h3 class="sec-title">${escapeHtml(s.title)}</h3>` : ""}
+        ${paragraphsHtml(s.content)}
+      `).join("\n");
+      return `<section class="chapter"><h2>第 ${ci + 1} 章　${escapeHtml(c.title || "")}</h2>${secHtml}</section>`;
+    }).join("\n");
+
+    const tocHtml = p.chapters.map((c, ci) => {
+      const has = c.sections.some((s) => s.content && s.content.trim());
+      return has ? `<li>第 ${ci + 1} 章　${escapeHtml(c.title || "")}</li>` : "";
+    }).join("\n");
+
+    const writingMode = opts.vertical
+      ? `writing-mode: vertical-rl; text-orientation: mixed; height: 92vh; column-width: 34em; column-gap: 3em; overflow-x: auto; overflow-y: hidden;`
+      : `max-width: 34em; margin: 0 auto;`;
+
+    return `<!DOCTYPE html>
+<html lang="zh-Hant"><head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>${escapeHtml(p.name || "小說")}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;500;700;900&display=swap" rel="stylesheet">
+<style>
+  :root{ --bg:${theme.bg}; --fg:${theme.fg}; --accent:${theme.accent}; --sub:${theme.sub}; }
+  *{ box-sizing:border-box; }
+  body{ margin:0; background:var(--bg); color:var(--fg); font-family:'Noto Serif TC', serif; }
+  .page{ padding: 8vh 6vw 12vh; }
+  .cover{ text-align:center; padding: 22vh 6vw; }
+  .cover h1{ font-size: 2.4em; font-weight:900; letter-spacing:.06em; margin-bottom: .6em; }
+  .cover .rule{ width:60px; height:2px; background:var(--accent); margin:0 auto 1.4em; }
+  .cover .meta{ color:var(--sub); font-size:.9em; line-height:2; }
+  .toc{ max-width:34em; margin:0 auto; padding: 10vh 6vw; }
+  .toc h2{ font-size:1.3em; border-bottom:1px solid var(--sub); padding-bottom:.5em; margin-bottom:1em; }
+  .toc ul{ list-style:none; padding:0; line-height:2.4; }
+  .book{ ${writingMode} font-size:${opts.fontSize}px; line-height:${opts.lineHeight}; padding: 6vh 6vw 16vh; }
+  .chapter{ margin-bottom: 4em; }
+  .chapter h2{ font-size:1.35em; text-align:center; margin: 0 0 1.6em; letter-spacing:.08em; }
+  .chapter h2::after{ content:""; display:block; width:36px; height:2px; background:var(--accent); margin: .6em auto 0; }
+  .sec-title{ font-size:1.05em; color:var(--accent); margin: 1.6em 0 .8em; }
+  .chapter p{ text-indent:2em; margin: 0 0 .9em; text-align:justify; word-break: break-word; }
+  .scene-break{ text-align:center; color:var(--sub); margin: 2em 0; letter-spacing:.5em; }
+</style></head>
+<body>
+  <div class="cover">
+    <h1>${escapeHtml(p.name || "未命名作品")}</h1>
+    <div class="rule"></div>
+    <div class="meta">${escapeHtml(p.settings.genre || "")}${p.settings.genre && p.settings.tone ? "・" : ""}${escapeHtml(p.settings.tone || "")}</div>
+  </div>
+  ${tocHtml ? `<div class="toc"><h2>目錄</h2><ul>${tocHtml}</ul></div>` : ""}
+  <div class="book">${chaptersHtml || "<p style='text-align:center;color:var(--sub);'>目前還沒有已完成的章節內容。</p>"}</div>
+</body></html>`;
+  }
+
+  function ebookOptsFromUI() {
+    const p = activeProject();
+    const fs = parseInt($("#ebook-fontsize").value, 10) || 18;
+    const lh = parseFloat($("#ebook-lineheight").value) || 2.0;
+    const theme = $("#ebook-theme").value;
+    const vertical = $("#ebook-vertical").checked;
+    p.ebookSettings = { fontSize: fs, lineHeight: lh, theme, vertical };
+    touch(p);
+    return p.ebookSettings;
+  }
+
+  function updateEbookPreview() {
+    const p = activeProject();
+    const iframe = $("#ebook-iframe");
+    if (!p || !iframe) return;
+    const opts = ebookOptsFromUI();
+    iframe.srcdoc = generateEbookHtml(p, opts);
+  }
+
+  function renderEbookPanel(p) {
+    const es = p.ebookSettings || { fontSize: 18, lineHeight: 2.0, theme: "paper", vertical: false };
+    const hasContent = !!gatherManuscript(p);
+    $("#panel-ebook").innerHTML = `
+      <h2 class="section-title">電子書預覽 <span>參考日系／台灣出版小說排版，自動分章分節、自動排版</span></h2>
+      <div class="ebook-toolbar">
+        <div class="field">
+          <label>字級</label>
+          <input type="number" id="ebook-fontsize" min="14" max="28" value="${es.fontSize}">
+        </div>
+        <div class="field">
+          <label>行距</label>
+          <input type="number" id="ebook-lineheight" min="1.4" max="3" step="0.1" value="${es.lineHeight}">
+        </div>
+        <div class="field wide">
+          <label>主題色</label>
+          <select id="ebook-theme">
+            <option value="paper" ${es.theme === "paper" ? "selected" : ""}>米白紙感（預設）</option>
+            <option value="sepia" ${es.theme === "sepia" ? "selected" : ""}>復古護眼</option>
+            <option value="night" ${es.theme === "night" ? "selected" : ""}>夜間閱讀</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>排版方向</label>
+          <label style="display:flex; align-items:center; gap:8px; font-weight:400; font-size:13px; padding-top:8px;">
+            <input type="checkbox" id="ebook-vertical" ${es.vertical ? "checked" : ""} style="width:auto;"> 直書（日系）
+          </label>
+        </div>
+        <button class="btn btn-jade" data-act="download-ebook">下載電子書 (.html)</button>
+      </div>
+      ${hasContent ? `
+        <div class="ebook-stage">
+          <div class="ebook-frame-wrap"><iframe id="ebook-iframe"></iframe></div>
+        </div>
+      ` : `<div class="ebook-empty">目前還沒有已完成的章節內容，先到「章節與生成」分頁生成或撰寫內容後，這裡會自動排成電子書畫面。</div>`}
+    `;
+    if (hasContent) {
+      updateEbookPreview();
+      ["ebook-fontsize", "ebook-lineheight", "ebook-theme"].forEach((id) => {
+        $("#" + id).addEventListener("input", updateEbookPreview);
+        $("#" + id).addEventListener("change", updateEbookPreview);
+      });
+      $("#ebook-vertical").addEventListener("change", updateEbookPreview);
+    }
+  }
+
+  function downloadEbook(p) {
+    if (!gatherManuscript(p)) { toast("目前還沒有已完成的章節內容可以匯出"); return; }
+    const opts = p.ebookSettings || { fontSize: 18, lineHeight: 2.0, theme: "paper", vertical: false };
+    const html = generateEbookHtml(p, opts);
+    downloadFile(`${p.name || "novel"}-ebook.html`, html, "text/html;charset=utf-8");
+    toast("已下載電子書 HTML 檔");
   }
 
   /* ---------------------------------------------------------------------

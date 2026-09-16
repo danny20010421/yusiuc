@@ -235,6 +235,9 @@ input,textarea,select{ font-family: var(--sans); color: var(--ink); }
   border:1px solid var(--border-soft); border-radius: var(--radius-s);
 }
 .sec-actions{ display:flex; gap:8px; margin-top:10px; flex-wrap:wrap; align-items:center; }
+.revise-box{ background: var(--jade-tint); border:1px solid var(--border-soft); border-radius: var(--radius-s); padding:10px 12px; margin-top:12px; }
+.revise-box label{ font-size:12px; font-weight:700; color: var(--jade); margin-bottom:6px; display:block; }
+.revise-box textarea{ min-height:48px; margin-bottom:8px; }
 .sec-wordcount{ font-size:11.5px; color: var(--ink-faint); margin-left:auto; }
 .empty-structure{ text-align:center; padding:50px 20px; color: var(--ink-faint); border:1px dashed var(--border); border-radius: var(--radius-m); }
 
@@ -272,6 +275,64 @@ input,textarea,select{ font-family: var(--sans); color: var(--ink); }
 .modal h3{ font-size:16px; margin-bottom:10px; }
 .modal p{ font-size:13px; color: var(--ink-soft); line-height:1.7; margin-bottom:18px; }
 .modal-actions{ display:flex; justify-content:flex-end; gap:10px; }
+
+/* ---------- chip field helper ---------- */
+.chip-group{ margin-top:10px; }
+.chip{ background:#fff; }
+.chip:hover{ border-color: var(--ink-soft); }
+
+/* ---------- AI settings extras ---------- */
+.field-hint{ font-size:11.5px; color: var(--ink-faint); margin-top:5px; line-height:1.65; }
+.field-hint a{ color: var(--seal); }
+.help-accordion{ border:1px solid var(--border-soft); border-radius: var(--radius-m); background: var(--paper-card); margin-top:26px; overflow:hidden; }
+.help-accordion summary{ padding:14px 18px; font-weight:700; font-size:13.5px; cursor:pointer; list-style:none; display:flex; align-items:center; gap:8px; }
+.help-accordion summary::-webkit-details-marker{ display:none; }
+.help-accordion summary::before{ content:"▸"; color: var(--seal); transition: transform .15s; }
+.help-accordion[open] summary::before{ transform: rotate(90deg); }
+.help-accordion .help-body{ padding: 4px 18px 18px; font-size:12.5px; color: var(--ink-soft); line-height:1.9; }
+.help-accordion .help-body h5{ font-size:12.5px; margin:14px 0 4px; color: var(--ink); }
+.help-accordion .help-body dl{ margin:0; }
+.help-accordion .help-body dt{ font-weight:700; color: var(--ink); margin-top:10px; }
+.help-accordion .help-body dd{ margin:2px 0 0; }
+.provider-key-link{ font-size:12px; margin-top:6px; }
+.provider-key-link a{ color: var(--seal); font-weight:600; }
+
+/* ---------- AI 審核 ---------- */
+.review-toolbar{ display:flex; align-items:center; gap:14px; margin-bottom:22px; flex-wrap:wrap; }
+.review-timestamp{ font-size:12px; color: var(--ink-faint); }
+.score-grid{ display:grid; grid-template-columns: repeat(3, 1fr); gap:14px; margin-bottom:22px; }
+@media (max-width:640px){ .score-grid{ grid-template-columns:1fr; } }
+.score-card{ border:1px solid var(--border-soft); border-radius: var(--radius-m); padding:18px; text-align:center; background:#fff; }
+.score-card .score-num{ font-family: var(--serif); font-size:34px; font-weight:700; line-height:1; }
+.score-card .score-label{ font-size:12px; color: var(--ink-faint); margin-top:6px; }
+.score-good .score-num{ color: var(--jade); }
+.score-mid .score-num{ color: #B8862F; }
+.score-bad .score-num{ color: var(--seal); }
+.review-summary{ background: var(--paper-card); border:1px solid var(--border-soft); border-radius: var(--radius-m); padding:16px 18px; margin-bottom:22px; font-size:13.5px; line-height:1.85; }
+.review-list-title{ font-size:13.5px; font-weight:700; margin: 20px 0 10px; }
+.review-list{ margin:0; padding-left:20px; font-size:13px; line-height:1.9; color: var(--ink-soft); }
+.review-chapter-note{ border-left:3px solid var(--border); padding:4px 0 4px 12px; margin-bottom:10px; font-size:13px; }
+.review-chapter-note b{ display:block; font-size:12.5px; color: var(--seal-dark); margin-bottom:2px; }
+.review-empty{ text-align:center; padding:60px 20px; color: var(--ink-faint); border:1px dashed var(--border); border-radius: var(--radius-m); }
+.review-disclaimer{ font-size:11.5px; color: var(--ink-faint); margin-top:22px; line-height:1.7; }
+.review-raw{ white-space:pre-wrap; font-size:12.5px; background: var(--paper-card); border:1px solid var(--border-soft); border-radius: var(--radius-m); padding:14px 16px; line-height:1.8; }
+
+/* ---------- 電子書預覽 ---------- */
+.ebook-toolbar{
+  display:flex; align-items:flex-end; gap:16px; flex-wrap:wrap;
+  background: var(--paper-card); border:1px solid var(--border-soft); border-radius: var(--radius-m);
+  padding:16px 18px; margin-bottom:20px;
+}
+.ebook-toolbar .field{ margin-bottom:0; width:150px; }
+.ebook-toolbar .field.wide{ width:200px; }
+.ebook-stage{ display:flex; justify-content:center; }
+.ebook-frame-wrap{
+  width:100%; max-width:760px; height:74vh; min-height:480px;
+  border:1px solid var(--border); border-radius: var(--radius-m); overflow:hidden;
+  box-shadow: var(--shadow-card); background:#fff;
+}
+.ebook-frame-wrap iframe{ width:100%; height:100%; border:none; }
+.ebook-empty{ text-align:center; padding:60px 20px; color: var(--ink-faint); border:1px dashed var(--border); border-radius: var(--radius-m); }
 
 /* ---------- scrollbars ---------- */
 .shelf-list::-webkit-scrollbar, .tab-panels::-webkit-scrollbar{ width:9px; }
