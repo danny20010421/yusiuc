@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>輕鬆寫 · AI 小說創作工坊</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect width=%22100%22 height=%22100%22 fill=%22%23D6293E%22/><text x=%2250%22 y=%2266%22 font-size=%2260%22 text-anchor=%22middle%22 fill=%22%23FFFFFF%22 font-family=%22serif%22>輕</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;500;600;700;900&family=Noto+Sans+TC:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+<div class="app-shell">
+
+  <!-- 手機版頂列 -->
+  <div class="mobile-topbar">
+    <button class="hamburger" id="btn-hamburger" aria-label="開啟作品清單">☰</button>
+    <div class="mt-title" id="mobile-title">輕鬆寫</div>
+  </div>
+  <div class="shelf-backdrop" id="shelf-backdrop"></div>
+
+  <!-- 書架側欄：專案清單 -->
+  <aside class="shelf" id="shelf">
+    <div class="shelf-head">
+      <div class="brand">
+        <span class="brand-mark">輕</span>
+        <div class="brand-text">
+          <h1>輕鬆寫</h1>
+          <p>AI 小說創作工坊</p>
+        </div>
+      </div>
+      <button class="btn btn-seal btn-block" id="btn-new-project">＋ 新增作品</button>
+    </div>
+
+    <div class="shelf-search">
+      <input type="search" id="project-search" placeholder="搜尋作品…">
+    </div>
+
+    <div class="shelf-list" id="project-list"><!-- 專案卡片 render 於此 --></div>
+
+    <div class="shelf-foot">
+      <button class="btn btn-ghost btn-block" id="btn-import-project">匯入備份</button>
+      <input type="file" id="import-file-input" accept="application/json" hidden>
+    </div>
+  </aside>
+
+  <!-- 主工作區 -->
+  <main class="workspace" id="workspace">
+
+    <!-- 尚未選擇作品時的歡迎畫面 -->
+    <section class="empty-state" id="empty-state">
+      <div class="empty-inner">
+        <span class="empty-mark">輕</span>
+        <h2>從左側開始一部新作品</h2>
+        <p>設定風格、視角、人物與章節架構，讓 AI 依你的世界觀逐節生成小說內容。所有資料只存在你的瀏覽器裡，永遠不會上傳到任何伺服器。</p>
+        <button class="btn btn-seal" id="btn-new-project-empty">＋ 建立第一部作品</button>
+      </div>
+    </section>
+
+    <!-- 專案工作區 -->
+    <section class="project-view hidden" id="project-view">
+
+      <header class="project-header">
+        <div class="project-title-row">
+          <input type="text" id="project-name" class="project-name-input" placeholder="作品名稱">
+          <div class="project-stats" id="project-stats"></div>
+        </div>
+        <nav class="tabs" id="tabs">
+          <button class="tab-btn is-active" data-tab="settings">基本設定</button>
+          <button class="tab-btn" data-tab="world">世界觀</button>
+          <button class="tab-btn" data-tab="timeline">時間線</button>
+          <button class="tab-btn" data-tab="characters">人物</button>
+          <button class="tab-btn" data-tab="glossary">特殊名詞</button>
+          <button class="tab-btn" data-tab="constraints">故事限制</button>
+          <button class="tab-btn" data-tab="structure">章節與生成</button>
+          <button class="tab-btn" data-tab="review">AI 審核</button>
+          <button class="tab-btn" data-tab="ebook">電子書預覽</button>
+          <button class="tab-btn" data-tab="ai">AI 設定</button>
+          <button class="tab-btn" data-tab="export">匯出／備份</button>
+        </nav>
+      </header>
+
+      <div class="tab-panels" id="tab-panels">
+        <div class="panel" data-panel="settings" id="panel-settings"></div>
+        <div class="panel hidden" data-panel="world" id="panel-world"></div>
+        <div class="panel hidden" data-panel="timeline" id="panel-timeline"></div>
+        <div class="panel hidden" data-panel="characters" id="panel-characters"></div>
+        <div class="panel hidden" data-panel="glossary" id="panel-glossary"></div>
+        <div class="panel hidden" data-panel="constraints" id="panel-constraints"></div>
+        <div class="panel hidden" data-panel="structure" id="panel-structure"></div>
+        <div class="panel hidden" data-panel="review" id="panel-review"></div>
+        <div class="panel hidden" data-panel="ebook" id="panel-ebook"></div>
+        <div class="panel hidden" data-panel="ai" id="panel-ai"></div>
+        <div class="panel hidden" data-panel="export" id="panel-export"></div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<!-- 通用確認對話框 -->
+<div class="modal-backdrop hidden" id="modal-backdrop">
+  <div class="modal" id="modal-box" role="dialog" aria-modal="true">
+    <h3 id="modal-title"></h3>
+    <p id="modal-body"></p>
+    <div class="modal-actions" id="modal-actions"></div>
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
