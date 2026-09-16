@@ -189,7 +189,7 @@
       constraints: { mustInclude: "", mustAvoid: "", rating: "", other: "" },
       chapters: [],
       review: null,
-      ebookSettings: { fontSize: 18, lineHeight: 2.0, theme: "paper", vertical: false }
+      ebookSettings: { fontSize: 18, lineHeight: 2.0, theme: "paper", direction: "horizontal", mode: "scroll", coverStyle: "jp" }
     };
     db.order.unshift(id);
     db.activeId = id;
@@ -217,11 +217,12 @@
   /* ---------------------------------------------------------------------
      頂層渲染
      --------------------------------------------------------------------- */
-  let state = { tab: "settings", openChapters: {}, openSections: {} };
+  let state = { tab: "settings", openChapters: {}, openSections: {}, tagPools: {}, openTimelineId: null };
 
   function render() {
     renderShelf();
     const p = activeProject();
+    $("#mobile-title").textContent = p ? (p.name || "未命名作品") : "稿間";
     if (!p) {
       $("#empty-state").classList.remove("hidden");
       $("#project-view").classList.add("hidden");
@@ -232,6 +233,15 @@
     renderProjectHeader(p);
     renderTabs();
     renderActivePanel(p);
+  }
+
+  function toggleShelf() {
+    $("#shelf").classList.toggle("is-open");
+    $("#shelf-backdrop").classList.toggle("is-open");
+  }
+  function closeShelf() {
+    $("#shelf").classList.remove("is-open");
+    $("#shelf-backdrop").classList.remove("is-open");
   }
 
   function renderShelf() {
@@ -294,8 +304,11 @@
   }
 
   /* ---------------------------------------------------------------------
-     標籤（chip）選項小工具，共用於基本設定的類型／基調／風格
+     標籤（tag picker）選項小工具：已選標籤以膠囊顯示，未選項目以小批
+     隨機選項輪替顯示，選了就消失、自動補上新的一個，避免整批塞滿畫面。
+     共用於基本設定的類型／基調／風格。
      --------------------------------------------------------------------- */
+  const POOL_SIZE = 6;
   function parseTags(value) {
     return (value || "").split(/[、,，]/).map((s) => s.trim()).filter(Boolean);
   }
@@ -305,11 +318,38 @@
     if (idx >= 0) parts.splice(idx, 1); else parts.push(tag);
     return parts.join("、");
   }
-  function renderChipGroup(scope, key, presets, currentValue) {
+  function shuffleSample(arr, n) {
+    const copy = arr.slice();
+    for (let i = copy.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [copy[i], copy[j]] = [copy[j], copy[i]];
+    }
+    return copy.slice(0, n);
+  }
+  function getTagPool(poolKey, presets, selected) {
+    const available = presets.filter((t) => !selected.includes(t));
+    let pool = state.tagPools[poolKey];
+    if (pool) pool = pool.filter((t) => available.includes(t));
+    if (!pool || pool.length < Math.min(POOL_SIZE, available.length)) {
+      pool = shuffleSample(available, Math.min(POOL_SIZE, available.length));
+    }
+    state.tagPools[poolKey] = pool;
+    return pool;
+  }
+  function renderTagPicker(p, scope, key, presets, currentValue) {
     const selected = parseTags(currentValue);
-    return `<div class="chip-group">${presets.map((tag) => `
-      <button type="button" class="chip ${selected.includes(tag) ? "is-selected" : ""}" data-act="toggle-tag" data-scope="${scope}" data-key="${key}" data-tag="${escapeHtml(tag)}">${escapeHtml(tag)}</button>
-    `).join("")}</div>`;
+    const poolKey = `${p.id}:${scope}:${key}`;
+    const pool = getTagPool(poolKey, presets, selected);
+    return `
+      <div class="tagpicker">
+        <div class="tagpicker-selected">${selected.map((tag) => `
+          <button type="button" class="tag-pill" data-act="toggle-tag" data-scope="${scope}" data-key="${key}" data-tag="${escapeHtml(tag)}">${escapeHtml(tag)} <span class="x">✕</span></button>
+        `).join("")}</div>
+        <div class="tagpicker-pool">
+          ${pool.map((tag) => `<button type="button" class="chip" data-act="toggle-tag" data-scope="${scope}" data-key="${key}" data-tag="${escapeHtml(tag)}">＋ ${escapeHtml(tag)}</button>`).join("")}
+          ${presets.length > selected.length ? `<button type="button" class="chip-shuffle" data-act="shuffle-tags" data-scope="${scope}" data-key="${key}">⟲ 換一批</button>` : ""}
+        </div>
+      </div>`;
   }
 
   /* ---------------------------------------------------------------------
@@ -325,20 +365,20 @@
         <div class="field">
           <label>小說性質／類型</label>
           <input type="text" data-scope="settings" data-key="genre" value="${escapeHtml(s.genre)}" placeholder="例如：都市異能、架空歷史、輕科幻、言情">
-          ${renderChipGroup("settings", "genre", GENRE_PRESETS, s.genre)}
+          ${renderTagPicker(p, "settings", "genre", GENRE_PRESETS, s.genre)}
         </div>
         <div class="field">
           <label>基調</label>
           <input type="text" data-scope="settings" data-key="tone" value="${escapeHtml(s.tone)}" placeholder="例如：輕鬆詼諧、黑暗壓抑、溫暖治癒">
-          ${renderChipGroup("settings", "tone", TONE_PRESETS, s.tone)}
+          ${renderTagPicker(p, "settings", "tone", TONE_PRESETS, s.tone)}
         </div>
       </div>
 
       <div class="field">
         <label>寫作風格</label>
         <textarea data-scope="settings" data-key="style" placeholder="描述文字節奏、句式長短、用詞偏好、對白比例、節奏快慢等。例如：短句為主、多用感官細節、對白精簡有潛台詞。">${escapeHtml(s.style)}</textarea>
-        ${renderChipGroup("settings", "style", STYLE_PRESETS, s.style)}
-        <p class="hint">點選下方標籤可直接加入／移除，也可以在上面欄位自行補充更細緻的描述。</p>
+        ${renderTagPicker(p, "settings", "style", STYLE_PRESETS, s.style)}
+        <p class="hint">點選標籤可直接加入／移除，未選中的標籤會輪流顯示幾個給你參考，也可以在上面欄位自行補充更細緻的描述。</p>
       </div>
 
       <div class="field">
@@ -402,28 +442,47 @@
      面板：時間線
      --------------------------------------------------------------------- */
   function renderTimelinePanel(p) {
-    const rows = p.timeline.map((t) => `
-      <div class="item-card" data-id="${t.id}">
-        <div class="row row-2">
-          <div class="field" style="margin-bottom:0;">
-            <label>時間點</label>
-            <input type="text" data-scope="timeline" data-id="${t.id}" data-key="time" value="${escapeHtml(t.time)}" placeholder="例如：故事開始前十年 / 第三章當下">
-          </div>
-          <div class="field" style="margin-bottom:0; display:flex; align-items:flex-end; justify-content:flex-end;">
-            <button class="icon-btn" data-act="delete-timeline" data-id="${t.id}">刪除此事件</button>
-          </div>
-        </div>
-        <div class="field" style="margin-top:12px; margin-bottom:0;">
-          <label>事件內容</label>
-          <textarea data-scope="timeline" data-id="${t.id}" data-key="event" placeholder="發生了什麼事、影響是什麼">${escapeHtml(t.event)}</textarea>
-        </div>
+    const nodesHtml = p.timeline.map((t, i) => `
+      <div class="timeline-node-wrap ${state.openTimelineId === t.id ? "is-open" : ""}" data-act="toggle-timeline" data-id="${t.id}">
+        <div class="timeline-node"></div>
+        <div class="timeline-node-time">${escapeHtml(t.time || `事件 ${i + 1}`)}</div>
+        <div class="timeline-node-snippet">${escapeHtml((t.event || "").slice(0, 14))}</div>
       </div>
     `).join("");
 
+    const editing = p.timeline.find((t) => t.id === state.openTimelineId);
+    const idx = editing ? p.timeline.findIndex((t) => t.id === editing.id) : -1;
+    const editorHtml = editing ? `
+      <div class="timeline-editor">
+        <div class="timeline-editor-head">
+          <div class="order-btns">
+            <button class="icon-btn" data-act="move-timeline" data-id="${editing.id}" data-dir="-1" ${idx <= 0 ? "disabled" : ""}>← 提前</button>
+            <button class="icon-btn" data-act="move-timeline" data-id="${editing.id}" data-dir="1" ${idx >= p.timeline.length - 1 ? "disabled" : ""}>延後 →</button>
+          </div>
+          <button class="icon-btn" data-act="delete-timeline" data-id="${editing.id}">刪除此事件</button>
+        </div>
+        <div class="field">
+          <label>時間點</label>
+          <input type="text" data-scope="timeline" data-id="${editing.id}" data-key="time" value="${escapeHtml(editing.time)}" placeholder="例如：故事開始前十年 / 第三章當下">
+        </div>
+        <div class="field" style="margin-bottom:0;">
+          <label>事件內容</label>
+          <textarea data-scope="timeline" data-id="${editing.id}" data-key="event" placeholder="發生了什麼事、影響是什麼">${escapeHtml(editing.event)}</textarea>
+        </div>
+      </div>
+    ` : "";
+
     $("#panel-timeline").innerHTML = `
-      <h2 class="section-title">時間線 <span>依故事內時序排列，供 AI 掌握事件先後與因果</span></h2>
-      ${p.timeline.length ? rows : `<div class="list-empty">尚未新增任何時間線事件。</div>`}
-      <button class="btn btn-jade add-row" data-act="add-timeline">＋ 新增事件</button>
+      <h2 class="section-title">時間線 <span>依故事內時序排列，點圖表上的節點即可編輯</span></h2>
+      ${p.timeline.length ? `
+        <div class="timeline-chart">
+          <div class="timeline-rail"></div>
+          ${nodesHtml}
+          <div class="timeline-add-node"><button data-act="add-timeline">＋</button></div>
+        </div>
+      ` : `<div class="timeline-empty">尚未新增任何時間線事件，點下方按鈕開始建立。</div>`}
+      ${editorHtml}
+      ${!p.timeline.length ? `<button class="btn btn-jade add-row" data-act="add-timeline">＋ 新增事件</button>` : ""}
     `;
   }
 
@@ -763,6 +822,7 @@
     switch (act) {
       case "select-project":
         db.activeId = ds.id; persistDb(); state.tab = "settings"; render();
+        if (window.innerWidth <= 900) closeShelf();
         break;
       case "duplicate-project": {
         const src = db.projects[ds.id];
@@ -792,11 +852,32 @@
         }
         break;
       }
+      case "shuffle-tags": {
+        const poolKey = `${p.id}:${ds.scope}:${ds.key}`;
+        delete state.tagPools[poolKey];
+        renderSettingsPanel(p);
+        break;
+      }
 
-      case "add-timeline":
-        p.timeline.push({ id: uid(), time: "", event: "" }); touch(p); renderTimelinePanel(p); break;
+      case "add-timeline": {
+        const nt = { id: uid(), time: "", event: "" };
+        p.timeline.push(nt); state.openTimelineId = nt.id; touch(p); renderTimelinePanel(p); break;
+      }
       case "delete-timeline":
-        p.timeline = p.timeline.filter((t) => t.id !== ds.id); touch(p); renderTimelinePanel(p); break;
+        p.timeline = p.timeline.filter((t) => t.id !== ds.id);
+        if (state.openTimelineId === ds.id) state.openTimelineId = null;
+        touch(p); renderTimelinePanel(p); break;
+      case "toggle-timeline":
+        state.openTimelineId = state.openTimelineId === ds.id ? null : ds.id;
+        renderTimelinePanel(p); break;
+      case "move-timeline": {
+        const dir = parseInt(ds.dir, 10);
+        const i = p.timeline.findIndex((t) => t.id === ds.id);
+        const j = i + dir;
+        if (i < 0 || j < 0 || j >= p.timeline.length) break;
+        [p.timeline[i], p.timeline[j]] = [p.timeline[j], p.timeline[i]];
+        touch(p); renderTimelinePanel(p); break;
+      }
 
       case "add-character":
         p.characters.push({ id: uid(), role: ds.role, name: "", identity: "", personality: "", background: "", relationships: "" });
@@ -867,6 +948,25 @@
       case "run-review":
         runReview(p, ev.target);
         break;
+      case "apply-review-item": {
+        const kind = ds.kind, idx = parseInt(ds.idx, 10);
+        const arr = p.review && p.review.data && (kind === "issue" ? p.review.data.issues : p.review.data.suggestions);
+        const text = arr && arr[idx];
+        const sel = document.getElementById(ds.select);
+        const sectionId = sel && sel.value;
+        if (!text || !sectionId) { toast("找不到對應內容"); break; }
+        applyReviewSuggestion(sectionId, text, ev.target);
+        break;
+      }
+
+      case "set-ebook-opt": {
+        p.ebookSettings = Object.assign(
+          { fontSize: 18, lineHeight: 2.0, theme: "paper", direction: "horizontal", mode: "scroll", coverStyle: "jp" },
+          p.ebookSettings, { [ds.key]: ds.value }
+        );
+        touch(p); renderEbookPanel(p);
+        break;
+      }
 
       case "export-novel-txt": exportNovelTxt(p); break;
       case "export-project-json": exportProjectJson(p); break;
@@ -1072,6 +1172,31 @@
     return "";
   }
 
+  async function performRevision(p, section, chapter, feedbackText, btnEl) {
+    if (!feedbackText || !feedbackText.trim()) { toast("修改建議內容是空的"); return false; }
+    const system = buildSystemPrompt(p) + "\n\n你現在的任務是依照使用者的修改建議，重寫並微調下面這一節內容，維持與前後文的連貫，並同樣只輸出這一節微調後的完整正文，不要輸出任何說明或前言。";
+    const user = [
+      `【目前所在章節】${chapter.title || "（未命名章節）"}`,
+      `【這一節目前的完整內容】\n${section.content && section.content.trim() ? section.content : "（目前是空的，請依建議與大綱直接寫出完整內容）"}`,
+      `【修改建議】\n${feedbackText}`,
+      "請輸出微調後的完整本節內容（整節正文，不要只給片段或摘要）。"
+    ].join("\n\n");
+    const originalLabel = btnEl.textContent;
+    btnEl.disabled = true; btnEl.textContent = "處理中…";
+    try {
+      const text = await callAI({ system, user });
+      section.content = text.trim();
+      section.status = "draft";
+      touch(p);
+      return true;
+    } catch (err) {
+      toast("失敗：" + err.message);
+      return false;
+    } finally {
+      btnEl.disabled = false; btnEl.textContent = originalLabel;
+    }
+  }
+
   async function generateSection(p, sectionId, btnEl) {
     const section = findSection(p, sectionId);
     const chapter = findChapterOfSection(p, sectionId);
@@ -1112,29 +1237,31 @@
     if (!section || !chapter) return;
     if (!section.content || !section.content.trim()) { toast("這一節還沒有內容，請先生成或手動撰寫後再微調"); return; }
     if (!section.feedback || !section.feedback.trim()) { toast("請先在「給 AI 的修改建議」欄位填寫想調整的地方"); return; }
-
-    const system = buildSystemPrompt(p) + "\n\n你現在的任務是依照使用者的修改建議，重寫並微調下面這一節「已存在」的內容，維持與前後文的連貫，並同樣只輸出這一節微調後的完整正文，不要輸出任何說明或前言。";
-    const user = [
-      `【目前所在章節】${chapter.title || "（未命名章節）"}`,
-      `【這一節目前的完整內容】\n${section.content}`,
-      `【使用者的修改建議】\n${section.feedback}`,
-      "請輸出微調後的完整本節內容（整節正文，不要只給片段或摘要）。"
-    ].join("\n\n");
-
-    const originalLabel = btnEl.textContent;
-    btnEl.disabled = true; btnEl.textContent = "微調中…";
-    try {
-      const text = await callAI({ system, user });
-      section.content = text.trim();
-      touch(p);
+    const ok = await performRevision(p, section, chapter, section.feedback, btnEl);
+    if (ok) {
       renderStructurePanel(p);
       renderProjectHeader(p);
       toast("已依建議微調本節內容，記得再檢查一次");
-    } catch (err) {
-      toast("微調失敗：" + err.message);
-    } finally {
-      btnEl.disabled = false; btnEl.textContent = originalLabel;
     }
+  }
+
+  function allSectionsWithLabel(p) {
+    const list = [];
+    p.chapters.forEach((c, ci) => c.sections.forEach((s, si) => {
+      list.push({ id: s.id, label: `第${ci + 1}章-第${si + 1}節${s.title ? "：" + s.title : ""}` });
+    }));
+    return list;
+  }
+
+  async function applyReviewSuggestion(sectionId, text, btnEl) {
+    const p = activeProject();
+    if (!p) return;
+    const section = findSection(p, sectionId);
+    const chapter = findChapterOfSection(p, sectionId);
+    if (!section || !chapter) { toast("找不到指定的小節"); return; }
+    section.feedback = text;
+    const ok = await performRevision(p, section, chapter, text, btnEl);
+    if (ok) toast("已套用建議，可到「章節與生成」分頁查看調整後的內容");
   }
 
   /* ---------------------------------------------------------------------
@@ -1192,6 +1319,21 @@
     return "score-bad";
   }
 
+  function renderReviewItem(p, kind, idx, text) {
+    const sections = allSectionsWithLabel(p);
+    const selId = `apply-sel-${kind}-${idx}`;
+    return `
+      <div class="review-item">
+        <div>${escapeHtml(text)}</div>
+        ${sections.length ? `
+          <div class="apply-row">
+            <select id="${selId}">${sections.map((s) => `<option value="${s.id}">${escapeHtml(s.label)}</option>`).join("")}</select>
+            <button class="btn btn-jade btn-sm" data-act="apply-review-item" data-kind="${kind}" data-idx="${idx}" data-select="${selId}">✓ 認同，套用到此小節</button>
+          </div>
+        ` : ""}
+      </div>`;
+  }
+
   function renderReviewPanel(p) {
     const manuscriptExists = !!gatherManuscript(p);
     const r = p.review;
@@ -1211,8 +1353,8 @@
           <div class="review-list-title">各章評語</div>
           ${d.chapter_notes.map((c) => `<div class="review-chapter-note"><b>${escapeHtml(c.chapter || "")}</b>${escapeHtml(c.note || "")}</div>`).join("")}
         ` : ""}
-        ${(d.issues || []).length ? `<div class="review-list-title">發現的問題</div><ul class="review-list">${d.issues.map((i) => `<li>${escapeHtml(i)}</li>`).join("")}</ul>` : ""}
-        ${(d.suggestions || []).length ? `<div class="review-list-title">修改建議</div><ul class="review-list">${d.suggestions.map((i) => `<li>${escapeHtml(i)}</li>`).join("")}</ul>` : ""}
+        ${(d.issues || []).length ? `<div class="review-list-title">發現的問題</div>${d.issues.map((text, idx) => renderReviewItem(p, "issue", idx, text)).join("")}` : ""}
+        ${(d.suggestions || []).length ? `<div class="review-list-title">修改建議</div>${d.suggestions.map((text, idx) => renderReviewItem(p, "suggestion", idx, text)).join("")}` : ""}
       `;
     } else {
       body = `<div class="review-list-title">AI 回覆（原始內容，格式無法自動解析）</div><div class="review-raw">${escapeHtml(r.raw)}</div>`;
@@ -1245,6 +1387,9 @@
 
   function generateEbookHtml(p, opts) {
     const theme = EBOOK_THEMES[opts.theme] || EBOOK_THEMES.paper;
+    const vertical = opts.direction === "vertical";
+    const paginate = opts.mode === "paginate";
+
     const chaptersHtml = p.chapters.map((c, ci) => {
       const sections = c.sections.filter((s) => s.content && s.content.trim());
       if (!sections.length) return "";
@@ -1261,45 +1406,140 @@
       return has ? `<li>第 ${ci + 1} 章　${escapeHtml(c.title || "")}</li>` : "";
     }).join("\n");
 
-    const writingMode = opts.vertical
-      ? `writing-mode: vertical-rl; text-orientation: mixed; height: 92vh; column-width: 34em; column-gap: 3em; overflow-x: auto; overflow-y: hidden;`
-      : `max-width: 34em; margin: 0 auto;`;
+    const genre = escapeHtml(p.settings.genre || "");
+    const tone = escapeHtml(p.settings.tone || "");
+    const title = escapeHtml(p.name || "未命名作品");
+    const tagsHtml = parseTags(p.settings.genre).concat(parseTags(p.settings.tone)).slice(0, 4)
+      .map((t) => `<span class="cover-tag">${escapeHtml(t)}</span>`).join("");
+
+    const coverHtml = opts.coverStyle === "us" ? `
+      <div class="cover cover-us">
+        <div class="us-frame">
+          <div class="us-rule"></div>
+          <div class="us-genre">${genre}${genre && tone ? " · " : ""}${tone}</div>
+          <h1>${title}</h1>
+          <div class="us-rule"></div>
+          <div class="us-byline">一部由作者親自構思、AI 協作完成的作品</div>
+        </div>
+      </div>
+    ` : `
+      <div class="cover cover-jp">
+        <div class="jp-blob jp-blob-a"></div>
+        <div class="jp-blob jp-blob-b"></div>
+        <div class="jp-tagrow">${tagsHtml}</div>
+        <h1>${title}</h1>
+        <div class="jp-sub">${genre}${genre && tone ? "　" : ""}${tone}</div>
+      </div>
+    `;
+
+    const writingModeCss = vertical
+      ? `writing-mode: vertical-rl; text-orientation: mixed;`
+      : ``;
+
+    const bookLayoutCss = paginate
+      ? `height: calc(100vh - 54px); column-width: 100%; column-gap: 0; overflow-x: auto; overflow-y: hidden; scroll-behavior: smooth;`
+      : (vertical ? `height: 96vh; column-width: 34em; column-gap: 3em; overflow-x: auto; overflow-y: hidden;` : `max-width: 34em; margin: 0 auto;`);
+
+    const toolbarHtml = paginate ? `
+      <div class="pg-toolbar">
+        <button id="pg-prev">‹ 上一頁</button>
+        <span id="pg-indicator">1 / 1</span>
+        <button id="pg-next">下一頁 ›</button>
+      </div>
+    ` : "";
+
+    const pagScript = paginate ? `
+      <script>
+      (function(){
+        var book = document.querySelector('.book');
+        var prevBtn = document.getElementById('pg-prev');
+        var nextBtn = document.getElementById('pg-next');
+        var indicator = document.getElementById('pg-indicator');
+        var current = 0;
+        function pageSize(){ return book.clientWidth || 1; }
+        function totalPages(){ return Math.max(1, Math.round(book.scrollWidth / pageSize())); }
+        function update(animate){
+          var tp = totalPages();
+          if (current < 0) current = 0;
+          if (current > tp - 1) current = tp - 1;
+          book.scrollTo({ left: current * pageSize(), behavior: animate === false ? 'auto' : 'smooth' });
+          indicator.textContent = (current + 1) + ' / ' + tp;
+          prevBtn.disabled = current <= 0;
+          nextBtn.disabled = current >= tp - 1;
+          if (animate !== false) {
+            book.classList.remove('flip'); void book.offsetWidth; book.classList.add('flip');
+          }
+        }
+        nextBtn.addEventListener('click', function(){ current++; update(); });
+        prevBtn.addEventListener('click', function(){ current--; update(); });
+        document.addEventListener('keydown', function(e){
+          if (e.key === 'ArrowRight') { current++; update(); }
+          if (e.key === 'ArrowLeft') { current--; update(); }
+        });
+        var startX = null;
+        book.addEventListener('touchstart', function(e){ startX = e.touches[0].clientX; });
+        book.addEventListener('touchend', function(e){
+          if (startX === null) return;
+          var dx = e.changedTouches[0].clientX - startX;
+          if (Math.abs(dx) > 40) { if (dx < 0) current++; else current--; update(); }
+          startX = null;
+        });
+        window.addEventListener('resize', function(){ update(false); });
+        setTimeout(function(){ update(false); }, 80);
+      })();
+      </script>
+    ` : "";
 
     return `<!DOCTYPE html>
 <html lang="zh-Hant"><head><meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>${escapeHtml(p.name || "小說")}</title>
+<title>${title}</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;500;700;900&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;500;700;900&family=Noto+Sans+TC:wght@400;700;900&display=swap" rel="stylesheet">
 <style>
   :root{ --bg:${theme.bg}; --fg:${theme.fg}; --accent:${theme.accent}; --sub:${theme.sub}; }
   *{ box-sizing:border-box; }
-  body{ margin:0; background:var(--bg); color:var(--fg); font-family:'Noto Serif TC', serif; }
-  .page{ padding: 8vh 6vw 12vh; }
-  .cover{ text-align:center; padding: 22vh 6vw; }
-  .cover h1{ font-size: 2.4em; font-weight:900; letter-spacing:.06em; margin-bottom: .6em; }
-  .cover .rule{ width:60px; height:2px; background:var(--accent); margin:0 auto 1.4em; }
-  .cover .meta{ color:var(--sub); font-size:.9em; line-height:2; }
+  html,body{ margin:0; height:100%; }
+  body{ background:var(--bg); color:var(--fg); font-family:'Noto Serif TC', serif; }
+  .cover{ min-height:100vh; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; padding:8vh 8vw; position:relative; overflow:hidden; }
+  .cover h1{ font-size:2.3em; font-weight:900; letter-spacing:.05em; margin: .3em 0; line-height:1.3; }
+  .cover-us{ background:var(--bg); }
+  .us-frame{ max-width:22em; z-index:1; }
+  .us-rule{ width:100%; height:1px; background:var(--sub); margin:1.1em 0; opacity:.6; }
+  .us-genre{ font-family:'Noto Sans TC',sans-serif; letter-spacing:.25em; font-size:.72em; color:var(--sub); }
+  .us-byline{ font-family:'Noto Sans TC',sans-serif; font-size:.72em; color:var(--sub); margin-top:1.4em; }
+  .cover-jp{ background: linear-gradient(160deg, var(--accent) 0%, var(--bg) 62%); color:#fff; }
+  .jp-blob{ position:absolute; border-radius:50%; filter: blur(2px); opacity:.35; }
+  .jp-blob-a{ width:46vw; height:46vw; background:#fff; top:-18vw; right:-14vw; }
+  .jp-blob-b{ width:30vw; height:30vw; background:var(--bg); bottom:-10vw; left:-8vw; opacity:.5; }
+  .jp-tagrow{ z-index:1; margin-bottom:1.4em; display:flex; gap:8px; flex-wrap:wrap; justify-content:center; }
+  .cover-tag{ font-family:'Noto Sans TC',sans-serif; font-size:.68em; background:rgba(255,255,255,.22); padding:.35em .9em; border-radius:20px; letter-spacing:.05em; }
+  .cover-jp h1{ z-index:1; text-shadow: 0 3px 18px rgba(0,0,0,.35); }
+  .jp-sub{ z-index:1; font-family:'Noto Sans TC',sans-serif; font-size:.8em; opacity:.9; margin-top:.6em; letter-spacing:.1em; }
   .toc{ max-width:34em; margin:0 auto; padding: 10vh 6vw; }
   .toc h2{ font-size:1.3em; border-bottom:1px solid var(--sub); padding-bottom:.5em; margin-bottom:1em; }
   .toc ul{ list-style:none; padding:0; line-height:2.4; }
-  .book{ ${writingMode} font-size:${opts.fontSize}px; line-height:${opts.lineHeight}; padding: 6vh 6vw 16vh; }
-  .chapter{ margin-bottom: 4em; }
+  .book{ ${writingModeCss} ${bookLayoutCss} font-size:${opts.fontSize}px; line-height:${opts.lineHeight}; padding: 6vh 6vw 10vh; scrollbar-width:none; }
+  .book::-webkit-scrollbar{ display:none; }
+  .book.flip{ animation: pageflip .28s ease; }
+  @keyframes pageflip{ from{ opacity:.4; filter: brightness(1.15);} to{ opacity:1; filter:brightness(1);} }
+  .chapter{ margin-bottom: 4em; break-inside: avoid-column; }
   .chapter h2{ font-size:1.35em; text-align:center; margin: 0 0 1.6em; letter-spacing:.08em; }
   .chapter h2::after{ content:""; display:block; width:36px; height:2px; background:var(--accent); margin: .6em auto 0; }
   .sec-title{ font-size:1.05em; color:var(--accent); margin: 1.6em 0 .8em; }
   .chapter p{ text-indent:2em; margin: 0 0 .9em; text-align:justify; word-break: break-word; }
   .scene-break{ text-align:center; color:var(--sub); margin: 2em 0; letter-spacing:.5em; }
+  .pg-toolbar{ position:fixed; left:0; right:0; bottom:0; height:54px; background:var(--bg); border-top:1px solid rgba(128,128,128,.25); display:flex; align-items:center; justify-content:center; gap:18px; font-family:'Noto Sans TC',sans-serif; font-size:13px; color:var(--fg); }
+  .pg-toolbar button{ border:1px solid var(--sub); background:transparent; color:var(--fg); padding:6px 14px; border-radius:20px; font-size:12.5px; cursor:pointer; }
+  .pg-toolbar button:disabled{ opacity:.35; }
 </style></head>
 <body>
-  <div class="cover">
-    <h1>${escapeHtml(p.name || "未命名作品")}</h1>
-    <div class="rule"></div>
-    <div class="meta">${escapeHtml(p.settings.genre || "")}${p.settings.genre && p.settings.tone ? "・" : ""}${escapeHtml(p.settings.tone || "")}</div>
-  </div>
+  ${coverHtml}
   ${tocHtml ? `<div class="toc"><h2>目錄</h2><ul>${tocHtml}</ul></div>` : ""}
-  <div class="book">${chaptersHtml || "<p style='text-align:center;color:var(--sub);'>目前還沒有已完成的章節內容。</p>"}</div>
+  <div class="book" data-mode="${opts.mode}">${chaptersHtml || "<p style='text-align:center;color:var(--sub);'>目前還沒有已完成的章節內容。</p>"}</div>
+  ${toolbarHtml}
+  ${pagScript}
 </body></html>`;
   }
 
@@ -1308,8 +1548,7 @@
     const fs = parseInt($("#ebook-fontsize").value, 10) || 18;
     const lh = parseFloat($("#ebook-lineheight").value) || 2.0;
     const theme = $("#ebook-theme").value;
-    const vertical = $("#ebook-vertical").checked;
-    p.ebookSettings = { fontSize: fs, lineHeight: lh, theme, vertical };
+    p.ebookSettings = Object.assign({}, p.ebookSettings, { fontSize: fs, lineHeight: lh, theme });
     touch(p);
     return p.ebookSettings;
   }
@@ -1323,10 +1562,12 @@
   }
 
   function renderEbookPanel(p) {
-    const es = p.ebookSettings || { fontSize: 18, lineHeight: 2.0, theme: "paper", vertical: false };
+    const es = p.ebookSettings || { fontSize: 18, lineHeight: 2.0, theme: "paper", direction: "horizontal", mode: "scroll", coverStyle: "jp" };
     const hasContent = !!gatherManuscript(p);
+    const seg = (key, options) => `<div class="seg">${options.map((o) => `<button type="button" class="${es[key] === o.value ? "is-active" : ""}" data-act="set-ebook-opt" data-key="${key}" data-value="${o.value}">${o.label}</button>`).join("")}</div>`;
     $("#panel-ebook").innerHTML = `
-      <h2 class="section-title">電子書預覽 <span>參考日系／台灣出版小說排版，自動分章分節、自動排版</span></h2>
+      <h2 class="section-title">電子書預覽 <span>參考日系輕小說／歐美文學排版，自動分章分節與封面設計</span></h2>
+      <p class="panel-intro">封面與排版由程式依你的類型、基調自動設計產生（非 AI 生成圖片），可隨時切換風格重新排版；如需更精緻的插畫封面，未來可再接上圖像生成服務。</p>
       <div class="ebook-toolbar">
         <div class="field">
           <label>字級</label>
@@ -1346,9 +1587,15 @@
         </div>
         <div class="field">
           <label>排版方向</label>
-          <label style="display:flex; align-items:center; gap:8px; font-weight:400; font-size:13px; padding-top:8px;">
-            <input type="checkbox" id="ebook-vertical" ${es.vertical ? "checked" : ""} style="width:auto;"> 直書（日系）
-          </label>
+          ${seg("direction", [{ value: "horizontal", label: "橫書" }, { value: "vertical", label: "直書" }])}
+        </div>
+        <div class="field">
+          <label>閱讀方式</label>
+          ${seg("mode", [{ value: "scroll", label: "滾動" }, { value: "paginate", label: "翻頁" }])}
+        </div>
+        <div class="field">
+          <label>封面風格</label>
+          ${seg("coverStyle", [{ value: "jp", label: "日系輕小說" }, { value: "us", label: "歐美文學" }])}
         </div>
         <button class="btn btn-jade" data-act="download-ebook">下載電子書 (.html)</button>
       </div>
@@ -1364,13 +1611,12 @@
         $("#" + id).addEventListener("input", updateEbookPreview);
         $("#" + id).addEventListener("change", updateEbookPreview);
       });
-      $("#ebook-vertical").addEventListener("change", updateEbookPreview);
     }
   }
 
   function downloadEbook(p) {
     if (!gatherManuscript(p)) { toast("目前還沒有已完成的章節內容可以匯出"); return; }
-    const opts = p.ebookSettings || { fontSize: 18, lineHeight: 2.0, theme: "paper", vertical: false };
+    const opts = p.ebookSettings || { fontSize: 18, lineHeight: 2.0, theme: "paper", direction: "horizontal", mode: "scroll", coverStyle: "jp" };
     const html = generateEbookHtml(p, opts);
     downloadFile(`${p.name || "novel"}-ebook.html`, html, "text/html;charset=utf-8");
     toast("已下載電子書 HTML 檔");
@@ -1446,8 +1692,8 @@
       if (e.target.matches("textarea[data-scope], input[type=text][data-scope]")) handleFieldChange(e.target);
     });
 
-    $("#btn-new-project").addEventListener("click", () => { newProject("未命名作品"); state.tab = "settings"; render(); });
-    $("#btn-new-project-empty").addEventListener("click", () => { newProject("未命名作品"); state.tab = "settings"; render(); });
+    $("#btn-new-project").addEventListener("click", () => { newProject("未命名作品"); state.tab = "settings"; render(); closeShelf(); });
+    $("#btn-new-project-empty").addEventListener("click", () => { newProject("未命名作品"); state.tab = "settings"; render(); closeShelf(); });
 
     $("#project-name").addEventListener("input", (e) => {
       const p = activeProject();
@@ -1465,6 +1711,9 @@
       state.tab = btn.dataset.tab;
       render();
     });
+
+    $("#btn-hamburger").addEventListener("click", toggleShelf);
+    $("#shelf-backdrop").addEventListener("click", closeShelf);
 
     $("#btn-import-project").addEventListener("click", () => $("#import-file-input").click());
     $("#import-file-input").addEventListener("change", (e) => {
