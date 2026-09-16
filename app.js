@@ -971,6 +971,8 @@
       case "export-novel-txt": exportNovelTxt(p); break;
       case "export-project-json": exportProjectJson(p); break;
       case "download-ebook": downloadEbook(p); break;
+      case "generate-cover-art": generateCoverArt(p, ev.target); break;
+      case "remove-cover-art": removeCoverArt(p); break;
     }
   }
 
@@ -1385,34 +1387,60 @@
     return content.split(/\n+/).map((s) => s.trim()).filter(Boolean).map((s) => `<p>${escapeHtml(s)}</p>`).join("\n");
   }
 
+  function seededRandom(seed) {
+    let s = seed % 2147483647; if (s <= 0) s += 2147483646;
+    return function () { s = (s * 16807) % 2147483647; return (s - 1) / 2147483646; };
+  }
+  function hashStr(str) {
+    let h = 0; for (let i = 0; i < str.length; i++) { h = (h * 31 + str.charCodeAt(i)) | 0; }
+    return Math.abs(h) || 1;
+  }
+  function starsSvg(seed, count, color) {
+    const rnd = seededRandom(hashStr(seed));
+    let out = "";
+    for (let i = 0; i < count; i++) {
+      const x = (rnd() * 100).toFixed(1), y = (rnd() * 100).toFixed(1);
+      const s = (rnd() * 1.3 + 0.5).toFixed(2);
+      out += `<g transform="translate(${x},${y}) scale(${s})" opacity="${(rnd() * .5 + .5).toFixed(2)}"><path d="M0-3 L0.8-0.8 L3 0 L0.8 0.8 L0 3 L-0.8 0.8 L-3 0 L-0.8-0.8 Z" fill="${color}"/></g>`;
+    }
+    return `<svg class="cover-stars" viewBox="0 0 100 100" preserveAspectRatio="none">${out}</svg>`;
+  }
+
   function generateEbookHtml(p, opts) {
     const theme = EBOOK_THEMES[opts.theme] || EBOOK_THEMES.paper;
     const vertical = opts.direction === "vertical";
     const paginate = opts.mode === "paginate";
 
-    const chaptersHtml = p.chapters.map((c, ci) => {
+    const chapterEntries = p.chapters.map((c, ci) => {
       const sections = c.sections.filter((s) => s.content && s.content.trim());
-      if (!sections.length) return "";
+      if (!sections.length) return null;
       const secHtml = sections.map((s, si) => `
         ${si > 0 ? `<div class="scene-break">※</div>` : ""}
         ${s.title ? `<h3 class="sec-title">${escapeHtml(s.title)}</h3>` : ""}
         ${paragraphsHtml(s.content)}
       `).join("\n");
-      return `<section class="chapter"><h2>第 ${ci + 1} 章　${escapeHtml(c.title || "")}</h2>${secHtml}</section>`;
-    }).join("\n");
+      return { title: `第 ${ci + 1} 章　${c.title || ""}`, html: `<h2>第 ${ci + 1} 章　${escapeHtml(c.title || "")}</h2>${secHtml}` };
+    }).filter(Boolean);
 
-    const tocHtml = p.chapters.map((c, ci) => {
-      const has = c.sections.some((s) => s.content && s.content.trim());
-      return has ? `<li>第 ${ci + 1} 章　${escapeHtml(c.title || "")}</li>` : "";
-    }).join("\n");
+    const chaptersHtml = chapterEntries.map((c) => `<section class="chapter">${c.html}</section>`).join("\n");
+
+    const tocHtml = chapterEntries.map((c) => `<li>${escapeHtml(c.title)}</li>`).join("\n");
 
     const genre = escapeHtml(p.settings.genre || "");
     const tone = escapeHtml(p.settings.tone || "");
     const title = escapeHtml(p.name || "未命名作品");
     const tagsHtml = parseTags(p.settings.genre).concat(parseTags(p.settings.tone)).slice(0, 4)
       .map((t) => `<span class="cover-tag">${escapeHtml(t)}</span>`).join("");
+    const coverImg = opts.coverImageData;
 
-    const coverHtml = opts.coverStyle === "us" ? `
+    const coverHtml = coverImg ? `
+      <div class="cover cover-img" style="background-image:url('${coverImg}')">
+        <div class="cover-img-scrim"></div>
+        <div class="cover-img-tagrow">${tagsHtml}</div>
+        <h1>${title}</h1>
+        <div class="jp-sub">${genre}${genre && tone ? "　" : ""}${tone}</div>
+      </div>
+    ` : opts.coverStyle === "us" ? `
       <div class="cover cover-us">
         <div class="us-frame">
           <div class="us-rule"></div>
@@ -1424,68 +1452,133 @@
       </div>
     ` : `
       <div class="cover cover-jp">
+        ${starsSvg(title + "a", 26, "#ffffff")}
         <div class="jp-blob jp-blob-a"></div>
         <div class="jp-blob jp-blob-b"></div>
-        <div class="jp-tagrow">${tagsHtml}</div>
-        <h1>${title}</h1>
-        <div class="jp-sub">${genre}${genre && tone ? "　" : ""}${tone}</div>
+        <div class="jp-card">
+          <div class="jp-tagrow">${tagsHtml}</div>
+          <h1>${title}</h1>
+          <div class="jp-sub">${genre}${genre && tone ? "　" : ""}${tone}</div>
+        </div>
       </div>
     `;
 
-    const writingModeCss = vertical
-      ? `writing-mode: vertical-rl; text-orientation: mixed;`
-      : ``;
-
+    const writingModeCss = vertical ? `writing-mode: vertical-rl; text-orientation: mixed;` : ``;
     const bookLayoutCss = paginate
-      ? `height: calc(100vh - 54px); column-width: 100%; column-gap: 0; overflow-x: auto; overflow-y: hidden; scroll-behavior: smooth;`
+      ? `height: calc(100vh - 96px); column-width: 100%; column-gap: 0; overflow: hidden; margin-top:52px;`
       : (vertical ? `height: 96vh; column-width: 34em; column-gap: 3em; overflow-x: auto; overflow-y: hidden;` : `max-width: 34em; margin: 0 auto;`);
 
-    const toolbarHtml = paginate ? `
-      <div class="pg-toolbar">
-        <button id="pg-prev">‹ 上一頁</button>
-        <span id="pg-indicator">1 / 1</span>
-        <button id="pg-next">下一頁 ›</button>
+    const chromeHtml = paginate ? `
+      <div class="pg-topbar">
+        <span id="pg-percent">0%</span>
+        <span id="pg-running"></span>
+        <button id="pg-bookmark" aria-label="加入書籤">🔖</button>
       </div>
+      <button id="pg-prev" class="edge-nav edge-nav-l" aria-label="上一頁">‹</button>
+      <button id="pg-next" class="edge-nav edge-nav-r" aria-label="下一頁">›</button>
+      <div class="pg-bottom"><span id="pg-indicator">本章第 1 頁／共 1 頁</span></div>
     ` : "";
+
+    const chaptersJson = JSON.stringify(chapterEntries).replace(/</g, "\\u003c");
+    const bookId = "bk_" + hashStr(title + p.id);
 
     const pagScript = paginate ? `
       <script>
       (function(){
+        var CHAPTERS = ${chaptersJson};
         var book = document.querySelector('.book');
         var prevBtn = document.getElementById('pg-prev');
         var nextBtn = document.getElementById('pg-next');
         var indicator = document.getElementById('pg-indicator');
-        var current = 0;
-        function pageSize(){ return book.clientWidth || 1; }
-        function totalPages(){ return Math.max(1, Math.round(book.scrollWidth / pageSize())); }
-        function update(animate){
-          var tp = totalPages();
-          if (current < 0) current = 0;
-          if (current > tp - 1) current = tp - 1;
-          book.scrollTo({ left: current * pageSize(), behavior: animate === false ? 'auto' : 'smooth' });
-          indicator.textContent = (current + 1) + ' / ' + tp;
-          prevBtn.disabled = current <= 0;
-          nextBtn.disabled = current >= tp - 1;
-          if (animate !== false) {
-            book.classList.remove('flip'); void book.offsetWidth; book.classList.add('flip');
+        var percentEl = document.getElementById('pg-percent');
+        var runningEl = document.getElementById('pg-running');
+        var bookmarkBtn = document.getElementById('pg-bookmark');
+        var BM_KEY = 'novelforge-bookmark-${bookId}';
+
+        var measure = document.createElement('div');
+        measure.className = 'book';
+        measure.style.cssText = 'position:fixed; visibility:hidden; left:-9999px; top:0; pointer-events:none;';
+        document.body.appendChild(measure);
+
+        var pageCounts = [];
+        var totalPages = 0;
+        function measureAll(){
+          pageCounts = []; totalPages = 0;
+          var rect = book.getBoundingClientRect();
+          measure.style.width = rect.width + 'px';
+          measure.style.height = rect.height + 'px';
+          for (var i = 0; i < CHAPTERS.length; i++) {
+            measure.innerHTML = CHAPTERS[i].html;
+            var n = Math.max(1, Math.round(measure.scrollWidth / rect.width));
+            pageCounts.push(n); totalPages += n;
           }
         }
-        nextBtn.addEventListener('click', function(){ current++; update(); });
-        prevBtn.addEventListener('click', function(){ current--; update(); });
+
+        var chapterIdx = 0, pageIdx = 0;
+        try {
+          var saved = JSON.parse(localStorage.getItem(BM_KEY) || 'null');
+          if (saved && typeof saved.c === 'number') { chapterIdx = saved.c; pageIdx = saved.p || 0; bookmarkBtn.classList.add('is-set'); }
+        } catch(e){}
+
+        function pagesBefore(ci){ var s=0; for(var i=0;i<ci;i++) s+=pageCounts[i]||1; return s; }
+
+        function render(animate){
+          if (!CHAPTERS.length) return;
+          if (chapterIdx < 0) chapterIdx = 0;
+          if (chapterIdx > CHAPTERS.length - 1) chapterIdx = CHAPTERS.length - 1;
+          book.innerHTML = CHAPTERS[chapterIdx].html;
+          var rect = book.getBoundingClientRect();
+          var tp = pageCounts[chapterIdx] || 1;
+          if (pageIdx < 0) pageIdx = 0;
+          if (pageIdx > tp - 1) pageIdx = tp - 1;
+          book.scrollLeft = pageIdx * rect.width;
+          indicator.textContent = '本章第 ' + (pageIdx + 1) + ' 頁／共 ' + tp + ' 頁';
+          runningEl.textContent = CHAPTERS[chapterIdx].title;
+          var overall = totalPages ? Math.round((pagesBefore(chapterIdx) + pageIdx + 1) / totalPages * 100) : 0;
+          percentEl.textContent = overall + '%';
+          prevBtn.disabled = (chapterIdx === 0 && pageIdx === 0);
+          nextBtn.disabled = (chapterIdx === CHAPTERS.length - 1 && pageIdx === tp - 1);
+          if (animate !== false) { book.classList.remove('flip'); void book.offsetWidth; book.classList.add('flip'); }
+        }
+
+        function next(){
+          var tp = pageCounts[chapterIdx] || 1;
+          if (pageIdx < tp - 1) { pageIdx++; }
+          else if (chapterIdx < CHAPTERS.length - 1) { chapterIdx++; pageIdx = 0; }
+          else return;
+          render();
+        }
+        function prev(){
+          if (pageIdx > 0) { pageIdx--; }
+          else if (chapterIdx > 0) { chapterIdx--; pageIdx = (pageCounts[chapterIdx] || 1) - 1; }
+          else return;
+          render();
+        }
+        nextBtn.addEventListener('click', next);
+        prevBtn.addEventListener('click', prev);
         document.addEventListener('keydown', function(e){
-          if (e.key === 'ArrowRight') { current++; update(); }
-          if (e.key === 'ArrowLeft') { current--; update(); }
+          if (e.key === 'ArrowRight') next();
+          if (e.key === 'ArrowLeft') prev();
         });
         var startX = null;
         book.addEventListener('touchstart', function(e){ startX = e.touches[0].clientX; });
         book.addEventListener('touchend', function(e){
           if (startX === null) return;
           var dx = e.changedTouches[0].clientX - startX;
-          if (Math.abs(dx) > 40) { if (dx < 0) current++; else current--; update(); }
+          if (Math.abs(dx) > 40) { if (dx < 0) next(); else prev(); }
           startX = null;
         });
-        window.addEventListener('resize', function(){ update(false); });
-        setTimeout(function(){ update(false); }, 80);
+        bookmarkBtn.addEventListener('click', function(){
+          try {
+            if (bookmarkBtn.classList.contains('is-set')) {
+              localStorage.removeItem(BM_KEY); bookmarkBtn.classList.remove('is-set');
+            } else {
+              localStorage.setItem(BM_KEY, JSON.stringify({ c: chapterIdx, p: pageIdx })); bookmarkBtn.classList.add('is-set');
+            }
+          } catch(e){}
+        });
+        window.addEventListener('resize', function(){ measureAll(); render(false); });
+        setTimeout(function(){ measureAll(); render(false); }, 60);
       })();
       </script>
     ` : "";
@@ -1501,44 +1594,60 @@
   :root{ --bg:${theme.bg}; --fg:${theme.fg}; --accent:${theme.accent}; --sub:${theme.sub}; }
   *{ box-sizing:border-box; }
   html,body{ margin:0; height:100%; }
-  body{ background:var(--bg); color:var(--fg); font-family:'Noto Serif TC', serif; }
+  body{ background:var(--bg); color:var(--fg); font-family:'Noto Serif TC', serif; position:relative; }
   .cover{ min-height:100vh; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; padding:8vh 8vw; position:relative; overflow:hidden; }
-  .cover h1{ font-size:2.3em; font-weight:900; letter-spacing:.05em; margin: .3em 0; line-height:1.3; }
+  .cover h1{ font-size:2.2em; font-weight:900; letter-spacing:.05em; margin: .3em 0; line-height:1.3; }
   .cover-us{ background:var(--bg); }
   .us-frame{ max-width:22em; z-index:1; }
   .us-rule{ width:100%; height:1px; background:var(--sub); margin:1.1em 0; opacity:.6; }
   .us-genre{ font-family:'Noto Sans TC',sans-serif; letter-spacing:.25em; font-size:.72em; color:var(--sub); }
   .us-byline{ font-family:'Noto Sans TC',sans-serif; font-size:.72em; color:var(--sub); margin-top:1.4em; }
-  .cover-jp{ background: linear-gradient(160deg, var(--accent) 0%, var(--bg) 62%); color:#fff; }
-  .jp-blob{ position:absolute; border-radius:50%; filter: blur(2px); opacity:.35; }
-  .jp-blob-a{ width:46vw; height:46vw; background:#fff; top:-18vw; right:-14vw; }
-  .jp-blob-b{ width:30vw; height:30vw; background:var(--bg); bottom:-10vw; left:-8vw; opacity:.5; }
-  .jp-tagrow{ z-index:1; margin-bottom:1.4em; display:flex; gap:8px; flex-wrap:wrap; justify-content:center; }
+  .cover-jp{ background: radial-gradient(ellipse at 30% 20%, ${theme.accent}dd 0%, #0c0c12 70%); color:#fff; }
+  .cover-stars{ position:absolute; inset:0; width:100%; height:100%; }
+  .jp-blob{ position:absolute; border-radius:50%; filter: blur(30px); opacity:.4; }
+  .jp-blob-a{ width:40vw; height:40vw; background:${theme.accent}; top:-16vw; right:-10vw; }
+  .jp-blob-b{ width:26vw; height:26vw; background:#fff; bottom:-8vw; left:-6vw; opacity:.15; }
+  .jp-card{ z-index:1; background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.25); border-radius:18px; padding:2.4em 1.6em; backdrop-filter: blur(3px); }
+  .jp-tagrow{ margin-bottom:1.2em; display:flex; gap:8px; flex-wrap:wrap; justify-content:center; }
   .cover-tag{ font-family:'Noto Sans TC',sans-serif; font-size:.68em; background:rgba(255,255,255,.22); padding:.35em .9em; border-radius:20px; letter-spacing:.05em; }
-  .cover-jp h1{ z-index:1; text-shadow: 0 3px 18px rgba(0,0,0,.35); }
+  .cover-jp h1{ text-shadow: 0 3px 18px rgba(0,0,0,.45); }
   .jp-sub{ z-index:1; font-family:'Noto Sans TC',sans-serif; font-size:.8em; opacity:.9; margin-top:.6em; letter-spacing:.1em; }
+  .cover-img{ background-size:cover; background-position:center; color:#fff; }
+  .cover-img-scrim{ position:absolute; inset:0; background: linear-gradient(180deg, rgba(0,0,0,.15) 0%, rgba(0,0,0,.65) 100%); }
+  .cover-img-tagrow{ z-index:1; margin-bottom:1.2em; display:flex; gap:8px; flex-wrap:wrap; justify-content:center; }
+  .cover-img h1, .cover-img .jp-sub, .cover-img-tagrow{ position:relative; z-index:1; }
+  .cover-img h1{ text-shadow: 0 3px 18px rgba(0,0,0,.6); }
   .toc{ max-width:34em; margin:0 auto; padding: 10vh 6vw; }
   .toc h2{ font-size:1.3em; border-bottom:1px solid var(--sub); padding-bottom:.5em; margin-bottom:1em; }
   .toc ul{ list-style:none; padding:0; line-height:2.4; }
-  .book{ ${writingModeCss} ${bookLayoutCss} font-size:${opts.fontSize}px; line-height:${opts.lineHeight}; padding: 6vh 6vw 10vh; scrollbar-width:none; }
+  .book{ ${writingModeCss} ${bookLayoutCss} font-size:${opts.fontSize}px; line-height:${opts.lineHeight}; padding: 2vh 7vw; scrollbar-width:none; }
   .book::-webkit-scrollbar{ display:none; }
-  .book.flip{ animation: pageflip .28s ease; }
-  @keyframes pageflip{ from{ opacity:.4; filter: brightness(1.15);} to{ opacity:1; filter:brightness(1);} }
+  .book.flip{ animation: pageflip .3s ease; }
+  @keyframes pageflip{ from{ opacity:.35; transform: scale(.99) rotateY(2deg); } to{ opacity:1; transform:none; } }
   .chapter{ margin-bottom: 4em; break-inside: avoid-column; }
   .chapter h2{ font-size:1.35em; text-align:center; margin: 0 0 1.6em; letter-spacing:.08em; }
   .chapter h2::after{ content:""; display:block; width:36px; height:2px; background:var(--accent); margin: .6em auto 0; }
   .sec-title{ font-size:1.05em; color:var(--accent); margin: 1.6em 0 .8em; }
   .chapter p{ text-indent:2em; margin: 0 0 .9em; text-align:justify; word-break: break-word; }
   .scene-break{ text-align:center; color:var(--sub); margin: 2em 0; letter-spacing:.5em; }
-  .pg-toolbar{ position:fixed; left:0; right:0; bottom:0; height:54px; background:var(--bg); border-top:1px solid rgba(128,128,128,.25); display:flex; align-items:center; justify-content:center; gap:18px; font-family:'Noto Sans TC',sans-serif; font-size:13px; color:var(--fg); }
-  .pg-toolbar button{ border:1px solid var(--sub); background:transparent; color:var(--fg); padding:6px 14px; border-radius:20px; font-size:12.5px; cursor:pointer; }
-  .pg-toolbar button:disabled{ opacity:.35; }
+  .pg-topbar{ position:fixed; top:0; left:0; right:0; height:52px; display:flex; align-items:center; justify-content:space-between; padding:0 18px; font-family:'Noto Sans TC',sans-serif; font-size:12px; color:var(--sub); z-index:6; }
+  .pg-topbar #pg-running{ flex:1; text-align:center; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; padding:0 10px; }
+  .pg-topbar button{ border:none; background:none; font-size:16px; cursor:pointer; opacity:.55; }
+  .pg-topbar button.is-set{ opacity:1; }
+  .pg-bottom{ position:fixed; left:0; right:0; bottom:14px; text-align:center; font-family:'Noto Sans TC',sans-serif; font-size:11.5px; color:var(--sub); z-index:6; }
+  .edge-nav{
+    position:fixed; top:50%; transform:translateY(-50%); width:42px; height:42px; border-radius:50%;
+    border:1px solid rgba(128,128,128,.3); background:rgba(128,128,128,.12); color:var(--fg);
+    font-size:20px; line-height:1; cursor:pointer; z-index:6; backdrop-filter: blur(2px);
+  }
+  .edge-nav:disabled{ opacity:.2; cursor:default; }
+  .edge-nav-l{ left:10px; } .edge-nav-r{ right:10px; }
 </style></head>
 <body>
   ${coverHtml}
   ${tocHtml ? `<div class="toc"><h2>目錄</h2><ul>${tocHtml}</ul></div>` : ""}
-  <div class="book" data-mode="${opts.mode}">${chaptersHtml || "<p style='text-align:center;color:var(--sub);'>目前還沒有已完成的章節內容。</p>"}</div>
-  ${toolbarHtml}
+  <div class="book" data-mode="${opts.mode}">${paginate ? "" : (chaptersHtml || "<p style='text-align:center;color:var(--sub);'>目前還沒有已完成的章節內容。</p>")}</div>
+  ${chromeHtml}
   ${pagScript}
 </body></html>`;
   }
@@ -1561,13 +1670,63 @@
     iframe.srcdoc = generateEbookHtml(p, opts);
   }
 
+  /* AI 封面插圖（僅 Google Gemini：generateContent 支援圖片輸出） */
+  async function generateCoverArt(p, btnEl) {
+    if (aiConfig.provider !== "google") { toast("目前僅支援 Google Gemini 生成封面插圖，請先到「AI 設定」切換服務提供者"); return; }
+    if (!aiConfig.apiKey) { toast("請先在「AI 設定」填寫 API 金鑰"); return; }
+    const imgModelInput = $("#ebook-cover-model");
+    const model = (imgModelInput && imgModelInput.value.trim()) || "gemini-2.5-flash-image";
+    const promptInput = $("#ebook-cover-prompt");
+    const userPrompt = (promptInput && promptInput.value.trim()) ||
+      `為小說《${p.name}》設計一張封面插畫。類型：${p.settings.genre || "無特別設定"}；基調：${p.settings.tone || "無特別設定"}；世界觀重點：${(p.world || "").slice(0, 200)}`;
+
+    const originalLabel = btnEl.textContent;
+    btnEl.disabled = true; btnEl.textContent = "生成中…";
+    try {
+      const base = "https://generativelanguage.googleapis.com/v1beta/models";
+      const url = `${base}/${model}:generateContent`;
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-goog-api-key": aiConfig.apiKey },
+        body: JSON.stringify({
+          contents: [{ role: "user", parts: [{ text: userPrompt + "（直式書封構圖，避免任何文字或字母出現在圖片中）" }] }],
+          generationConfig: { responseModalities: ["IMAGE"] }
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error((data && data.error && data.error.message) || `HTTP ${res.status}`);
+      const parts = data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts || [];
+      const imgPart = parts.find((pt) => pt.inlineData && pt.inlineData.data);
+      if (!imgPart) throw new Error("回應中沒有圖片資料，可能是這個模型不支援圖片生成");
+      const mime = imgPart.inlineData.mimeType || "image/png";
+      p.ebookSettings = Object.assign({}, p.ebookSettings, {
+        coverImageData: `data:${mime};base64,${imgPart.inlineData.data}`,
+        coverImageModel: model
+      });
+      touch(p);
+      renderEbookPanel(p);
+      toast("封面插圖已生成");
+    } catch (err) {
+      toast("封面生成失敗：" + err.message);
+    } finally {
+      btnEl.disabled = false; btnEl.textContent = originalLabel;
+    }
+  }
+
+  function removeCoverArt(p) {
+    p.ebookSettings = Object.assign({}, p.ebookSettings, { coverImageData: null });
+    touch(p);
+    renderEbookPanel(p);
+  }
+
   function renderEbookPanel(p) {
     const es = p.ebookSettings || { fontSize: 18, lineHeight: 2.0, theme: "paper", direction: "horizontal", mode: "scroll", coverStyle: "jp" };
     const hasContent = !!gatherManuscript(p);
     const seg = (key, options) => `<div class="seg">${options.map((o) => `<button type="button" class="${es[key] === o.value ? "is-active" : ""}" data-act="set-ebook-opt" data-key="${key}" data-value="${o.value}">${o.label}</button>`).join("")}</div>`;
+    const isGoogle = aiConfig.provider === "google";
     $("#panel-ebook").innerHTML = `
-      <h2 class="section-title">電子書預覽 <span>參考日系輕小說／歐美文學排版，自動分章分節與封面設計</span></h2>
-      <p class="panel-intro">封面與排版由程式依你的類型、基調自動設計產生（非 AI 生成圖片），可隨時切換風格重新排版；如需更精緻的插畫封面，未來可再接上圖像生成服務。</p>
+      <h2 class="section-title">電子書預覽 <span>參考日系輕小說／歐美文學排版，翻頁模式支援真實分頁與換頁動畫</span></h2>
+      <p class="panel-intro">「翻頁」模式會依章節計算頁數，左右兩側可點擊或滑動換頁，並顯示進度百分比與書籤功能；下載後打開也一樣可用。</p>
       <div class="ebook-toolbar">
         <div class="field">
           <label>字級</label>
@@ -1599,6 +1758,22 @@
         </div>
         <button class="btn btn-jade" data-act="download-ebook">下載電子書 (.html)</button>
       </div>
+
+      <div class="structure-toolbar" style="align-items:flex-start;">
+        <div style="flex:1; min-width:240px;">
+          <label style="display:block; font-size:12px; font-weight:700; color:var(--ink-soft); margin-bottom:6px;">AI 封面插圖（選用，全彩插畫）</label>
+          ${isGoogle ? `
+            <textarea id="ebook-cover-prompt" placeholder="留空則依類型／基調／世界觀自動組成提示詞；也可以自行描述想要的封面畫面、人物、構圖" style="width:100%; min-height:56px; margin-bottom:8px;"></textarea>
+            <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+              <input type="text" id="ebook-cover-model" value="${escapeHtml(es.coverImageModel || "gemini-2.5-flash-image")}" style="width:220px; padding:7px 10px; border:1px solid var(--border); border-radius:6px; font-size:12.5px;" placeholder="圖片模型名稱">
+              <button class="btn btn-seal btn-sm" data-act="generate-cover-art">✦ 生成封面插圖</button>
+              ${es.coverImageData ? `<button class="btn btn-ghost btn-sm" data-act="remove-cover-art">移除已生成的插圖</button>` : ""}
+            </div>
+            <p class="hint">會使用 Google Gemini 的圖片生成模型，消耗你自己帳號的額度；模型名稱如過期請至該服務文件確認最新可用名稱。</p>
+          ` : `<p class="hint">目前僅支援 Google Gemini 生成封面插畫（同一組金鑰同時可用於文字與圖片）。請先到「AI 設定」把服務提供者切換為 Google，即可在此輸入描述、生成全彩封面插圖；沒有設定時會使用下方自動設計的排版封面。</p>`}
+        </div>
+      </div>
+
       ${hasContent ? `
         <div class="ebook-stage">
           <div class="ebook-frame-wrap"><iframe id="ebook-iframe"></iframe></div>
