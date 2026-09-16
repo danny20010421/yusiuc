@@ -58,6 +58,7 @@ input,textarea,select{ font-family: var(--sans); color: var(--ink); }
 
 /* ---------- mobile top bar (hidden on desktop) ---------- */
 .mobile-topbar{ display:none; }
+.shelf-backdrop{ display:none; }
 
 /* ---------- shelf / sidebar ---------- */
 .shelf{
