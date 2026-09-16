@@ -1464,9 +1464,13 @@
     `;
 
     const writingModeCss = vertical ? `writing-mode: vertical-rl; text-orientation: mixed;` : ``;
-    const bookLayoutCss = paginate
-      ? `height: calc(100vh - 96px); column-width: 100%; column-gap: 0; overflow: hidden; margin-top:52px;`
-      : (vertical ? `height: 96vh; column-width: 34em; column-gap: 3em; overflow-x: auto; overflow-y: hidden;` : `max-width: 34em; margin: 0 auto;`);
+    const bookLayoutCss = vertical
+      ? (paginate
+          ? `height: calc(100vh - 96px); overflow-x: hidden; overflow-y: hidden; margin-top:52px;`
+          : `height: 96vh; overflow-x: auto; overflow-y: hidden;`)
+      : (paginate
+          ? `height: calc(100vh - 96px); column-width: 100%; column-gap: 0; overflow: hidden; margin-top:52px;`
+          : `max-width: 34em; margin: 0 auto;`);
 
     const chromeHtml = paginate ? `
       <div class="pg-topbar">
